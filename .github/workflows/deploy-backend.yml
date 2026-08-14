@@ -50,25 +50,38 @@ jobs:
 
       - name: SAM Deploy
         working-directory: backend
+        env:
+          USER_POOL_ID:        ${{ secrets.EXPO_PUBLIC_AWS_USER_POOL_ID }}
+          USER_POOL_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_AWS_USER_POOL_CLIENT_ID }}
+          OPENAI_API_KEY:      ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY:  ${{ secrets.ELEVENLABS_API_KEY }}
+          AZURE_SPEECH_KEY:    ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
         run: |
+          # ElevenLabs/Azure are optional (Default: "" in template.yaml) — `sam deploy
+          # --parameter-overrides` rejects a bare `Key=` with no value outright, so any
+          # unset optional secret must be OMITTED from the list entirely, not passed empty.
+          PARAMS=(
+            "Stage=${STAGE}"
+            "UserPoolId=${USER_POOL_ID}"
+            "UserPoolClientId=${USER_POOL_CLIENT_ID}"
+            "TranslationsTable=conversation_history"
+            "SettingsTable=user_settings"
+            "OpenAIApiKey=${OPENAI_API_KEY}"
+          )
+          [ -n "$ELEVENLABS_API_KEY" ]  && PARAMS+=("ElevenLabsApiKey=${ELEVENLABS_API_KEY}")
+          [ -n "$AZURE_SPEECH_KEY" ]    && PARAMS+=("AzureSpeechKey=${AZURE_SPEECH_KEY}")
+          [ -n "$AZURE_SPEECH_REGION" ] && PARAMS+=("AzureSpeechRegion=${AZURE_SPEECH_REGION}")
+
           sam deploy \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --stack-name   ai-translator-stack \
             --resolve-s3 \
             --s3-prefix    ai-translator-stack \
-            --region       ${{ env.AWS_REGION }} \
+            --region       "${AWS_REGION}" \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-            --parameter-overrides \
-              Stage=${{ env.STAGE }} \
-              UserPoolId=${{ secrets.EXPO_PUBLIC_AWS_USER_POOL_ID }} \
-              UserPoolClientId=${{ secrets.EXPO_PUBLIC_AWS_USER_POOL_CLIENT_ID }} \
-              TranslationsTable=conversation_history \
-              SettingsTable=user_settings \
-              OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} \
-              ElevenLabsApiKey=${{ secrets.ELEVENLABS_API_KEY }} \
-              AzureSpeechKey=${{ secrets.AZURE_SPEECH_KEY }} \
-              AzureSpeechRegion=${{ secrets.AZURE_SPEECH_REGION }}
+            --parameter-overrides "${PARAMS[@]}"
 
       - name: Print API base URL
         run: |
