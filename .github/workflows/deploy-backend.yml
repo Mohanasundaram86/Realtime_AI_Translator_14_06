@@ -1,0 +1,79 @@
+name: Deploy Backend (Lambda + API Gateway)
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Deployment stage'
+        required: true
+        default: 'prod'
+        type: choice
+        options: [prod, dev, staging]
+
+env:
+  AWS_REGION: ${{ secrets.EXPO_PUBLIC_AWS_REGION }}
+  STAGE:      ${{ github.event.inputs.stage || 'prod' }}
+
+jobs:
+  deploy-backend:
+    name: SAM Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.EXPO_PUBLIC_AWS_REGION }}
+
+      - name: Set up SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Install Lambda dependencies
+        working-directory: backend
+        run: npm install --omit=dev
+
+      - name: SAM Build
+        working-directory: backend
+        run: sam build --use-container
+
+      - name: SAM Deploy
+        working-directory: backend
+        run: |
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name   ai-translator-stack \
+            --resolve-s3 \
+            --s3-prefix    ai-translator-stack \
+            --region       ${{ env.AWS_REGION }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+            --parameter-overrides \
+              Stage=${{ env.STAGE }} \
+              UserPoolId=${{ secrets.EXPO_PUBLIC_AWS_USER_POOL_ID }} \
+              UserPoolClientId=${{ secrets.EXPO_PUBLIC_AWS_USER_POOL_CLIENT_ID }} \
+              TranslationsTable=conversation_history \
+              SettingsTable=user_settings \
+              OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} \
+              ElevenLabsApiKey=${{ secrets.ELEVENLABS_API_KEY }} \
+              AzureSpeechKey=${{ secrets.AZURE_SPEECH_KEY }} \
+              AzureSpeechRegion=${{ secrets.AZURE_SPEECH_REGION }}
+
+      - name: Print API base URL
+        run: |
+          echo "✅ Backend deployed!"
+          aws cloudformation describe-stacks \
+            --stack-name ai-translator-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiBaseUrl'].OutputValue" \
+            --output text
