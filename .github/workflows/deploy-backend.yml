@@ -2,7 +2,7 @@ name: Deploy Backend (Lambda + API Gateway)
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'
