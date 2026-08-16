@@ -63,6 +63,7 @@ const OFFLINE_SETTINGS: UserSettings = {
   default_target_language: DEFAULT_TARGET_LANGUAGE,
   tts_provider: 'device',
   conversation_mode_default: false,
+  plan: 'basic',
   updated_at: new Date().toISOString(),
 };
 
@@ -193,6 +194,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           default_target_language: DEFAULT_TARGET_LANGUAGE,
           tts_provider: 'device',
           conversation_mode_default: false,
+          // The backend ignores this on write and assigns its own default —
+          // set here only so client code has something to read before the
+          // first server round-trip completes.
+          plan: 'basic',
           updated_at: new Date().toISOString(),
         };
 

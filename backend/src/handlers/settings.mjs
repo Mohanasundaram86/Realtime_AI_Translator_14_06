@@ -25,11 +25,14 @@ export async function getSettings(event) {
         voice_gender:             'female',
         conversation_mode_default: false,
         custom_voice_id:          null,
+        plan:                     'basic',
         updated_at:               new Date().toISOString(),
       });
     }
 
-    return sendSuccess(result.Item);
+    // Backfill for pre-Phase-0 records that predate the `plan` attribute —
+    // avoids a one-off data migration for existing users.
+    return sendSuccess({ plan: 'basic', ...result.Item });
   } catch (err) {
     return handleError(err);
   }
@@ -54,6 +57,14 @@ export async function putSettings(event) {
       return sendError(400, `voice_gender must be one of: ${VALID_GENDERS.join(', ')}`);
     }
 
+    // `plan` is billing-controlled, never accepted from the client (this is a
+    // full "replace all preferences" endpoint the client already calls freely —
+    // reading body.plan here would let any user grant themselves Plus/Live for
+    // free). Preserve whatever's already on record, defaulting to 'basic' for
+    // a brand-new user, regardless of what the request body contains.
+    const existing = await db.send(new GetCommand({ TableName: SETTINGS_TABLE, Key: { user_id: userId } }));
+    const plan = existing.Item?.plan || 'basic';
+
     const item = {
       user_id:                  userId,
       default_source_language:  body.default_source_language  || 'auto',
@@ -62,6 +73,7 @@ export async function putSettings(event) {
       voice_gender:             body.voice_gender             || 'female',
       conversation_mode_default: body.conversation_mode_default ?? false,
       custom_voice_id:          body.custom_voice_id          || null,
+      plan,
       updated_at:               new Date().toISOString(),
     };
 
@@ -138,6 +150,11 @@ export async function resetSettings(event) {
   try {
     const userId = getUserId(event);
 
+    // Preserve plan across a preferences reset — this endpoint resets UI
+    // preferences (language, voice, etc.), not billing status.
+    const existing = await db.send(new GetCommand({ TableName: SETTINGS_TABLE, Key: { user_id: userId } }));
+    const plan = existing.Item?.plan || 'basic';
+
     const defaults = {
       user_id:                  userId,
       default_source_language:  'auto',
@@ -146,6 +163,7 @@ export async function resetSettings(event) {
       voice_gender:             'female',
       conversation_mode_default: false,
       custom_voice_id:          null,
+      plan,
       updated_at:               new Date().toISOString(),
     };
 

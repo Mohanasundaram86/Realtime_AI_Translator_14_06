@@ -17,6 +17,12 @@ export interface ConversationHistory {
   created_at: string;
 }
 
+// Subscription tier — see backend/src/lib/entitlement.mjs for the authoritative
+// definition. 'basic' < 'plus' < 'live' (each higher tier includes the ones below).
+// Billing-controlled: the backend never accepts this from a PUT/PATCH /v1/settings
+// body, so treat it as read-only on the client — there is no setPlan() call by design.
+export type SubscriptionPlan = 'basic' | 'plus' | 'live';
+
 export interface UserSettings {
   user_id: string;
   default_source_language: string;
@@ -27,6 +33,10 @@ export interface UserSettings {
   custom_voice_id?: string;
   voice_gender?: 'male' | 'female';
   selected_voice_id?: string;
+  /** Defaults to 'basic' server-side if absent — always present in practice once
+   *  fetched from GET /v1/settings, optional here only so locally-constructed
+   *  offline/default objects aren't forced to fabricate a value. */
+  plan?: SubscriptionPlan;
   updated_at: string;
 }
 
