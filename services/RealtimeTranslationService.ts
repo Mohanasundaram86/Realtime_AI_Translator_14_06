@@ -8,6 +8,7 @@ import { resolveLanguage, isCorrectScript, detectScriptLanguage } from '@/lib/co
 import { isNetworkError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { withTimeout, TimeoutError } from '@/lib/withTimeout';
+import { SubscriptionPlan } from '@/types';
 
 // expo-file-system is native-only — audio history persistence is skipped on
 // web, where recording/TTS URIs are blob: URLs FileSystem can't read anyway.
@@ -45,6 +46,10 @@ export class RealtimeTranslationService {
   private currentTargetLanguage = '';
   private currentTtsProvider: TTSProvider = 'openai';
   private currentUserId: string | undefined;
+  // 'basic' = today's batch pipeline; 'plus'/'live' attempt the streaming
+  // pipeline (see translateAndSpeakStreaming), falling back to batch on any
+  // failure so a lapsed plan or a transient streaming error never breaks a turn.
+  private currentPlan: SubscriptionPlan = 'basic';
   private isPersonATurn = true;
   private originalSourceLanguage = '';
   private originalTargetLanguage = '';
@@ -225,7 +230,68 @@ export class RealtimeTranslationService {
     return result;
   }
 
-  
+  /**
+   * Plus/Live pipeline: translates AND plays audio, sentence by sentence, as
+   * the translation streams in — TTS for sentence N starts as soon as it's
+   * detected, in parallel with sentence N+1 still translating, while playback
+   * itself stays strictly sequential via `playbackChain`. This is the actual
+   * latency win Phase 2 of the pricing discussion was about: "time to first
+   * audio" no longer waits for the entire translation to finish.
+   *
+   * Deliberately does NOT catch translateStreaming()'s own errors — the
+   * caller wraps this in try/catch and falls back to the batch pipeline on
+   * any failure (lapsed plan, network blip, streaming endpoint down), so a
+   * user never sees a broken turn just because the faster path had a bad day.
+   * Per-sentence TTS/playback failures ARE swallowed here, though — losing
+   * one sentence's audio isn't worth abandoning a translation that otherwise
+   * succeeded.
+   *
+   * Known simplification: unlike the batch pipeline, this never produces a
+   * single combined TTS clip, so streaming-pipeline turns save to history
+   * with source audio but no replayable translated-audio clip.
+   */
+  private async translateAndSpeakStreaming(actualText: string): Promise<string> {
+    const { translationProvider } = await import('./translationProvider');
+
+    let translatedText = '';
+    let playbackChain: Promise<void> = Promise.resolve();
+    let firstSentenceSeen = false;
+
+    const onSentence = (sentence: string) => {
+      translatedText = translatedText ? `${translatedText} ${sentence}` : sentence;
+      this.updateProgress({ stage: 'translating', translatedText, isRealtime: true });
+
+      // Start TTS immediately — this runs concurrently with any later
+      // sentences still streaming in. Only playback is serialized.
+      const ttsPromise = ttsService
+        .generateSpeech(sentence, this.currentTargetLanguage, this.currentTtsProvider)
+        .catch((err) => {
+          console.error('❌ Sentence TTS failed:', err);
+          return null;
+        });
+
+      playbackChain = playbackChain.then(async () => {
+        if (!firstSentenceSeen) {
+          firstSentenceSeen = true;
+          this.updateProgress({ stage: 'playing', translatedText, isRealtime: true });
+        }
+        const uri = await ttsPromise;
+        if (!uri) return;
+        try {
+          await audioService.playAudio(uri);
+        } catch (playError) {
+          console.error('❌ Sentence playback failed:', playError);
+        }
+      });
+    };
+
+    const full = await translationProvider.translateStreaming(
+      actualText, this.currentSourceLanguage, this.currentTargetLanguage, onSentence,
+    );
+
+    await playbackChain; // wait for the final sentence's audio to finish before returning
+    return full;
+  }
 
   // ────────────────────────────────────────────────────────────────
   // SINGLE TRANSLATION MODE (conversation toggle OFF)
@@ -237,11 +303,13 @@ export class RealtimeTranslationService {
     targetLanguage: string,
     ttsProvider: TTSProvider = 'openai',
     userId?: string,
+    plan: SubscriptionPlan = 'basic',
   ): Promise<void> {
     this.isActive = true;
     this.autoContinueEnabled = false;
     this.currentTtsProvider = ttsProvider;
     this.currentUserId = userId;
+    this.currentPlan = plan;
     this.isPersonATurn = true;
     this.currentSourceLanguage = sourceLanguage;
     this.currentTargetLanguage = targetLanguage;
@@ -331,68 +399,90 @@ export class RealtimeTranslationService {
       });
 
       let translatedText = '';
-      const translateStartedAt = Date.now();
-      await this.translate(
-        actualText,
-        this.currentSourceLanguage,
-        this.currentTargetLanguage,
-        (chunk) => {
-          translatedText += chunk;
-          this.updateProgress({
-            stage: 'translating',
-            sourceText: actualText,
-            translatedText,
-            isRealtime: true,
+      let ttsUri: string | null = null;
+      let usedStreamingPipeline = false;
+
+      if (this.currentPlan !== 'basic') {
+        try {
+          const streamStartedAt = Date.now();
+          translatedText = await this.translateAndSpeakStreaming(actualText);
+          this.logDuration('translate_and_speak_streaming', streamStartedAt);
+          usedStreamingPipeline = true;
+        } catch (streamErr) {
+          logger.warn('Streaming pipeline failed, falling back to batch pipeline', {
+            error: streamErr instanceof Error ? streamErr.message : String(streamErr),
           });
         }
-      );
-      this.logDuration('translate', translateStartedAt);
+      }
+
+      if (!usedStreamingPipeline) {
+        const translateStartedAt = Date.now();
+        await this.translate(
+          actualText,
+          this.currentSourceLanguage,
+          this.currentTargetLanguage,
+          (chunk) => {
+            translatedText += chunk;
+            this.updateProgress({
+              stage: 'translating',
+              sourceText: actualText,
+              translatedText,
+              isRealtime: true,
+            });
+          }
+        );
+        this.logDuration('translate', translateStartedAt);
+
+        if (!translatedText.trim()) {
+          throw new Error('Translation returned empty result');
+        }
+
+        console.log(`📝 Source text: "${actualText}"`);
+        console.log(`📝 Translated to ${tgtLang.name}: "${translatedText}"`);
+
+        // Generate TTS
+        this.updateProgress({
+          stage: 'generating_speech',
+          sourceText: actualText,
+          translatedText,
+          isRealtime: true,
+        });
+
+        const ttsStartedAt = Date.now();
+        ttsUri = await ttsService.generateSpeech(
+          translatedText, this.currentTargetLanguage, this.currentTtsProvider
+        );
+        this.logDuration('tts_generate', ttsStartedAt);
+
+        // Play audio (ttsUri is null for 'device' provider — expo-speech already spoke)
+        await audioService.forceCleanup();
+        this.updateProgress({
+          stage: 'playing',
+          sourceText: actualText,
+          translatedText,
+          isRealtime: true,
+        });
+        this.logDuration('time_to_first_audio', pipelineStartedAt);
+
+        if (ttsUri) {
+          try {
+            const playStartedAt = Date.now();
+            await audioService.playAudio(ttsUri);
+            this.logDuration('playback', playStartedAt);
+            console.log('✅ Audio playback complete');
+          } catch (playError) {
+            console.error('❌ Audio playback failed:', playError);
+          }
+        }
+      }
 
       if (!translatedText.trim()) {
         throw new Error('Translation returned empty result');
       }
-
       lastTranslatedText = translatedText;
 
-      console.log(`📝 Source text: "${actualText}"`);
-      console.log(`📝 Translated to ${tgtLang.name}: "${translatedText}"`);
-
-      // Generate TTS
-      this.updateProgress({
-        stage: 'generating_speech',
-        sourceText: actualText,
-        translatedText,
-        isRealtime: true,
-      });
-
-      const ttsStartedAt = Date.now();
-      const ttsUri = await ttsService.generateSpeech(
-        translatedText, this.currentTargetLanguage, this.currentTtsProvider
-      );
-      this.logDuration('tts_generate', ttsStartedAt);
-
-      // Play audio (ttsUri is null for 'device' provider — expo-speech already spoke)
-      await audioService.forceCleanup();
-      this.updateProgress({
-        stage: 'playing',
-        sourceText: actualText,
-        translatedText,
-        isRealtime: true,
-      });
-      this.logDuration('time_to_first_audio', pipelineStartedAt);
-
-      if (ttsUri) {
-        try {
-          const playStartedAt = Date.now();
-          await audioService.playAudio(ttsUri);
-          this.logDuration('playback', playStartedAt);
-          console.log('✅ Audio playback complete');
-        } catch (playError) {
-          console.error('❌ Audio playback failed:', playError);
-        }
-      }
-
-      // Save to history
+      // Save to history (streaming pipeline never produces a single combined
+      // TTS clip — see translateAndSpeakStreaming()'s header comment)
       await this.saveToHistory(
         this.currentSourceLanguage,
         this.currentTargetLanguage,
@@ -442,6 +532,7 @@ export class RealtimeTranslationService {
     // Feature: configurable silence/waiting timeout (ms) before control auto-hands
     // over to Person B. Defaults to DEFAULT_SILENCE_TIMEOUT_MS (10s) if omitted.
     silenceTimeoutMs: number = RealtimeTranslationService.DEFAULT_SILENCE_TIMEOUT_MS,
+    plan: SubscriptionPlan = 'basic',
   ): Promise<void> {
     this.isActive = true;
     this.autoContinueEnabled = true;
@@ -452,6 +543,7 @@ export class RealtimeTranslationService {
     this.currentTargetLanguage = targetLanguage;
     this.currentTtsProvider = ttsProvider;
     this.currentUserId = userId;
+    this.currentPlan = plan;
     this.silenceTimeoutMs = silenceTimeoutMs > 0 ? silenceTimeoutMs : RealtimeTranslationService.DEFAULT_SILENCE_TIMEOUT_MS;
     this.consecutiveSilenceHandovers = 0;
 
@@ -739,73 +831,98 @@ export class RealtimeTranslationService {
     });
 
     let translatedText = '';
-    const translateStartedAt = Date.now();
-    await this.translate(
-      actualText,
-      this.currentSourceLanguage,
-      this.currentTargetLanguage,
-      (chunk) => {
-        translatedText += chunk;
-        this.updateProgress({
-          stage: 'translating',
-          sourceText: actualText,
-          translatedText,
-          isRealtime: true,
+    let ttsUri: string | null = null;
+    let usedStreamingPipeline = false;
+
+    if (this.currentPlan !== 'basic') {
+      try {
+        const streamStartedAt = Date.now();
+        translatedText = await this.translateAndSpeakStreaming(actualText);
+        this.logDuration('translate_and_speak_streaming', streamStartedAt);
+        usedStreamingPipeline = true;
+      } catch (streamErr) {
+        logger.warn('Streaming pipeline failed, falling back to batch pipeline', {
+          error: streamErr instanceof Error ? streamErr.message : String(streamErr),
         });
       }
-    );
-    this.logDuration('translate', translateStartedAt);
+    }
+
+    if (!usedStreamingPipeline) {
+      const translateStartedAt = Date.now();
+      await this.translate(
+        actualText,
+        this.currentSourceLanguage,
+        this.currentTargetLanguage,
+        (chunk) => {
+          translatedText += chunk;
+          this.updateProgress({
+            stage: 'translating',
+            sourceText: actualText,
+            translatedText,
+            isRealtime: true,
+          });
+        }
+      );
+      this.logDuration('translate', translateStartedAt);
+
+      if (!translatedText.trim()) {
+        logger.error('Empty translation result', undefined, {
+          sourceLanguage: this.currentSourceLanguage, targetLanguage: this.currentTargetLanguage, platform: Platform.OS,
+        });
+        return { success: false, reason: 'Translation failed' };
+      }
+
+      console.log(`✅ Translated: "${translatedText.substring(0, 80)}"`);
+      logger.info('Translate stage complete', { translatedLength: translatedText.length, platform: Platform.OS });
+
+      // ── 3. GENERATE TTS ──
+      this.updateProgress({
+        stage: 'generating_speech',
+        sourceText: actualText,
+        translatedText,
+        isRealtime: true,
+      });
+
+      const ttsStartedAt = Date.now();
+      ttsUri = await ttsService.generateSpeech(
+        translatedText, this.currentTargetLanguage, this.currentTtsProvider
+      );
+      this.logDuration('tts_generate', ttsStartedAt);
+      console.log(`✅ TTS generated`);
+      logger.info('TTS stage complete', { provider: this.currentTtsProvider, hasAudioUri: !!ttsUri, platform: Platform.OS });
+
+      // ── 4. PLAY AUDIO (MUST complete before next turn) ──
+      // Recording is already stopped (stopRecording was called in conversationLoop).
+      // ttsUri is null when 'device' provider is used (expo-speech already spoke inline).
+      this.updateProgress({
+        stage: 'playing',
+        sourceText: actualText,
+        translatedText,
+        isRealtime: true,
+      });
+      this.logDuration('time_to_first_audio', pipelineStartedAt);
+
+      if (ttsUri) {
+        try {
+          const playStartedAt = Date.now();
+          await audioService.playAudio(ttsUri);
+          this.logDuration('playback', playStartedAt);
+          console.log('✅ Audio playback complete');
+        } catch (playError) {
+          // Not fatal to the turn (translation already succeeded), but a silent
+          // playback failure — heard as "nothing happened" — is otherwise
+          // indistinguishable from every other stage succeeding, so log it
+          // distinctly rather than only console.error (invisible on-device).
+          logger.error('Audio playback failed (translation succeeded)', playError, { platform: Platform.OS, ttsProvider: this.currentTtsProvider });
+        }
+      }
+    }
 
     if (!translatedText.trim()) {
-      logger.error('Empty translation result', undefined, {
+      logger.error('Empty translation result (streaming pipeline)', undefined, {
         sourceLanguage: this.currentSourceLanguage, targetLanguage: this.currentTargetLanguage, platform: Platform.OS,
       });
       return { success: false, reason: 'Translation failed' };
-    }
-
-    console.log(`✅ Translated: "${translatedText.substring(0, 80)}"`);
-    logger.info('Translate stage complete', { translatedLength: translatedText.length, platform: Platform.OS });
-
-    // ── 3. GENERATE TTS ──
-    this.updateProgress({
-      stage: 'generating_speech',
-      sourceText: actualText,
-      translatedText,
-      isRealtime: true,
-    });
-
-    const ttsStartedAt = Date.now();
-    const ttsUri = await ttsService.generateSpeech(
-      translatedText, this.currentTargetLanguage, this.currentTtsProvider
-    );
-    this.logDuration('tts_generate', ttsStartedAt);
-    console.log(`✅ TTS generated`);
-    logger.info('TTS stage complete', { provider: this.currentTtsProvider, hasAudioUri: !!ttsUri, platform: Platform.OS });
-
-    // ── 4. PLAY AUDIO (MUST complete before next turn) ──
-    // Recording is already stopped (stopRecording was called in conversationLoop).
-    // ttsUri is null when 'device' provider is used (expo-speech already spoke inline).
-    this.updateProgress({
-      stage: 'playing',
-      sourceText: actualText,
-      translatedText,
-      isRealtime: true,
-    });
-    this.logDuration('time_to_first_audio', pipelineStartedAt);
-
-    if (ttsUri) {
-      try {
-        const playStartedAt = Date.now();
-        await audioService.playAudio(ttsUri);
-        this.logDuration('playback', playStartedAt);
-        console.log('✅ Audio playback complete');
-      } catch (playError) {
-        // Not fatal to the turn (translation already succeeded), but a silent
-        // playback failure — heard as "nothing happened" — is otherwise
-        // indistinguishable from every other stage succeeding, so log it
-        // distinctly rather than only console.error (invisible on-device).
-        logger.error('Audio playback failed (translation succeeded)', playError, { platform: Platform.OS, ttsProvider: this.currentTtsProvider });
-      }
     }
 
     // Save to history

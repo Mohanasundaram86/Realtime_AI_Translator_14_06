@@ -12,15 +12,25 @@
  * URLs don't support the Cognito authorizer type API Gateway has), but that
  * just means auth enforcement moved from config into code, not that it's gone.
  *
- * Wire format is newline-delimited JSON, not raw OpenAI SSE — this keeps the
- * client decoupled from OpenAI's exact stream shape (same reasoning as every
- * other provider proxy in this backend). Each line is one of:
+ * Wire format is real Server-Sent Events (`data: <json>\n\n`), not raw OpenAI
+ * SSE relayed verbatim — the payload inside each `data:` is our own shape, so
+ * the client stays decoupled from OpenAI's exact stream format (same
+ * reasoning as every other provider proxy in this backend). React Native has
+ * no native EventSource and fetch() can't read a response body incrementally
+ * the way a browser can, so the client consumes this via `react-native-sse`
+ * (already a project dependency) rather than hand-rolled stream parsing.
+ * Each `data:` payload, once JSON-parsed, is one of:
  *   {"delta": "text chunk"}
  *   {"done": true}
  *   {"error": "message"}   — can appear even after a 200, since headers are
  *                             already committed once streaming starts; the
- *                             client must watch for this on every line, not
+ *                             client must watch for this on every event, not
  *                             just rely on the HTTP status.
+ * A failure BEFORE streaming starts (bad/missing auth, insufficient plan, bad
+ * body) is a normal plain-JSON error response instead — react-native-sse's
+ * EventSource surfaces that as its 'error' event with the body in
+ * `event.message` and the status in `event.xhrStatus`, no SSE parsing
+ * involved, so it deliberately does NOT need the `data:`-line format.
  *
  * Request body contract matches proxyOpenAIChat in aiProxy.mjs on purpose —
  * { model, messages[], temperature?, max_tokens? } — so the client reuses the
@@ -97,12 +107,15 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   // ── The real streaming response starts here ──────────────────────────
   const stream = awslambda.HttpResponseStream.from(responseStream, {
     statusCode: 200,
-    headers: { 'Content-Type': 'application/x-ndjson', ...CORS_HEADERS },
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', ...CORS_HEADERS },
   });
+
+  /** Writes one SSE event: `data: <json>\n\n`. */
+  const sendEvent = (payload) => stream.write(`data: ${JSON.stringify(payload)}\n\n`);
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    stream.write(JSON.stringify({ error: 'OpenAI is not configured on the server' }) + '\n');
+    sendEvent({ error: 'OpenAI is not configured on the server' });
     stream.end();
     return;
   }
@@ -122,12 +135,14 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
 
     if (!upstream.ok || !upstream.body) {
       const errText = await upstream.text().catch(() => '');
-      stream.write(JSON.stringify({ error: `Upstream error ${upstream.status}: ${errText.substring(0, 300)}` }) + '\n');
+      sendEvent({ error: `Upstream error ${upstream.status}: ${errText.substring(0, 300)}` });
       stream.end();
       return;
     }
 
-    // Parse OpenAI's SSE stream, relay only the text deltas as NDJSON.
+    // Parse OpenAI's own SSE stream, relay only the text deltas as our own
+    // SSE events (see the header comment on why this is re-emitted rather
+    // than piped through verbatim).
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -149,7 +164,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
         try {
           const json = JSON.parse(payload);
           const delta = json.choices?.[0]?.delta?.content;
-          if (delta) stream.write(JSON.stringify({ delta }) + '\n');
+          if (delta) sendEvent({ delta });
         } catch {
           // Malformed/split SSE chunk (rare, e.g. a chunk boundary mid-JSON) —
           // skip it rather than aborting the whole stream over one bad line.
@@ -157,13 +172,13 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
       }
     }
 
-    stream.write(JSON.stringify({ done: true }) + '\n');
+    sendEvent({ done: true });
   } catch (err) {
     // Mid-stream failure — the 200 + headers already went out, so a normal
-    // error response isn't possible anymore; this NDJSON line is the only
-    // way left to signal it, which is why the client must check every line
-    // for `error`, not just trust a 200 status.
-    stream.write(JSON.stringify({ error: err.message || 'Streaming failed' }) + '\n');
+    // error response isn't possible anymore; this SSE event is the only way
+    // left to signal it, which is why the client must check every event for
+    // `error`, not just trust the initial 200 status.
+    sendEvent({ error: err.message || 'Streaming failed' });
   } finally {
     stream.end();
   }

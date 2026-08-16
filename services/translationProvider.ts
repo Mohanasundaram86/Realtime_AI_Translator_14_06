@@ -1,5 +1,14 @@
+import EventSource from 'react-native-sse';
 import { proxyPost } from '@/lib/apiProxy';
 import { HIGH_QUALITY_LANGUAGES } from '@/lib/constants';
+import { dynamoService } from '@/services/dynamoService';
+
+const STREAM_URL = (process.env.EXPO_PUBLIC_API_STREAM_URL || '').replace(/\/$/, '');
+
+// Sentence-boundary punctuation across the scripts this app translates into —
+// Latin/most-European .!?, Devanagari-family danda ।, Arabic/Urdu/Persian ؟،
+// and CJK full-width 。！？, each optionally followed by a closing quote/paren.
+const SENTENCE_BOUNDARY = /([.!?।؟。！？][”"’'）)]?)(\s+|$)/;
 
 export type TranslationProviderName = 'openai' | 'device';
 
@@ -65,6 +74,43 @@ class TranslationProvider {
     }
   }
 
+  // Native-script examples embedded in the prompt anchor GPT to the correct Unicode block.
+  private static readonly SCRIPT_EXAMPLES: Record<string, string> = {
+    ml: 'ഉദാഹരണം: "നന്ദി" (not "nandi")',
+    ta: 'உதாரணம்: "நன்றி" (not "nandri")',
+    te: 'ఉదాహరణ: "ధన్యవాదాలు" (not "dhanyavaadaalu")',
+    kn: 'ಉದಾಹರಣೆ: "ಧನ್ಯವಾದಗಳು" (not "dhanyavaadagalu")',
+    hi: 'उदाहरण: "धन्यवाद" (not "dhanyavaad")',
+    mr: 'उदाहरण: "धन्यवाद" (not "dhanyavaad")',
+    bn: 'উদাহরণ: "ধন্যবাদ" (not "dhônyôbad")',
+    gu: 'ઉદાહરણ: "આભાર" (not "aabhar")',
+    pa: 'ਉਦਾਹਰਨ: "ਧੰਨਵਾਦ" (not "dhanyavaad")',
+    ur: 'مثال: "شکریہ" (not "shukriya")',
+    si: 'නිදසුන: "ස්තූතියි" (not "sthootiyi")',
+    ne: 'उदाहरण: "धन्यवाद" (not "dhanyavaad")',
+    ar: 'مثال: "شكراً" (not "shukran")',
+    fa: 'مثال: "ممنون" (not "mamnoon")',
+    he: 'דוגמה: "תודה" (not "toda")',
+  };
+
+  /** Shared by translate() and translateStreaming() so both routes prompt the
+   *  model identically — only how the response is fetched differs. */
+  private buildTranslationPrompt(sourceLanguage: string, targetLanguage: string): { model: string; systemPrompt: string } {
+    // gpt-4o for languages where gpt-4o-mini produces transliteration or wrong-script output
+    const model = HIGH_QUALITY_LANGUAGES.has(targetLanguage) ? 'gpt-4o' : 'gpt-4o-mini';
+    const srcName = langName(sourceLanguage);
+    const tgtName = langName(targetLanguage);
+    const scriptHint = TranslationProvider.SCRIPT_EXAMPLES[targetLanguage] ? ` ${TranslationProvider.SCRIPT_EXAMPLES[targetLanguage]}.` : '';
+
+    const systemPrompt =
+      `You are a professional translator. Translate the user's text from ${srcName} to ${tgtName}. ` +
+      `Return ONLY the ${tgtName} translation written entirely in the correct native script — ` +
+      `no explanation, no transliteration, no romanization, no Latin characters, no quotation marks.` +
+      scriptHint;
+
+    return { model, systemPrompt };
+  }
+
   async translate(
     text: string,
     sourceLanguage: string,
@@ -75,39 +121,139 @@ class TranslationProvider {
       return await this.deviceTranslate(text, sourceLanguage, targetLanguage, onChunk);
     }
 
-    // gpt-4o for languages where gpt-4o-mini produces transliteration or wrong-script output
-    const model = HIGH_QUALITY_LANGUAGES.has(targetLanguage) ? 'gpt-4o' : 'gpt-4o-mini';
-    const srcName = langName(sourceLanguage);
-    const tgtName = langName(targetLanguage);
-
-    // Native-script examples embedded in the prompt anchor GPT to the correct Unicode block.
-    const SCRIPT_EXAMPLES: Record<string, string> = {
-      ml: 'ഉദാഹരണം: "നന്ദി" (not "nandi")',
-      ta: 'உதாரணம்: "நன்றி" (not "nandri")',
-      te: 'ఉదాహరణ: "ధన్యవాదాలు" (not "dhanyavaadaalu")',
-      kn: 'ಉದಾಹರಣೆ: "ಧನ್ಯವಾದಗಳು" (not "dhanyavaadagalu")',
-      hi: 'उदाहरण: "धन्यवाद" (not "dhanyavaad")',
-      mr: 'उदाहरण: "धन्यवाद" (not "dhanyavaad")',
-      bn: 'উদাহরণ: "ধন্যবাদ" (not "dhônyôbad")',
-      gu: 'ઉદાહરણ: "આભાર" (not "aabhar")',
-      pa: 'ਉਦਾਹਰਨ: "ਧੰਨਵਾਦ" (not "dhanyavaad")',
-      ur: 'مثال: "شکریہ" (not "shukriya")',
-      si: 'නිදසුන: "ස්තූතියි" (not "sthootiyi")',
-      ne: 'उदाहरण: "धन्यवाद" (not "dhanyavaad")',
-      ar: 'مثال: "شكراً" (not "shukran")',
-      fa: 'مثال: "ممنون" (not "mamnoon")',
-      he: 'דוגמה: "תודה" (not "toda")',
-    };
-    const scriptHint = SCRIPT_EXAMPLES[targetLanguage] ? ` ${SCRIPT_EXAMPLES[targetLanguage]}.` : '';
-
-    const systemPrompt =
-      `You are a professional translator. Translate the user's text from ${srcName} to ${tgtName}. ` +
-      `Return ONLY the ${tgtName} translation written entirely in the correct native script — ` +
-      `no explanation, no transliteration, no romanization, no Latin characters, no quotation marks.` +
-      scriptHint;
-
+    const { model, systemPrompt } = this.buildTranslationPrompt(sourceLanguage, targetLanguage);
     const translation = await this.callProxyChat(model, systemPrompt, text, onChunk);
     return translation.trim();
+  }
+
+  /**
+   * Streaming variant for Plus/Live plans — calls onSentence() once per
+   * complete sentence as it arrives, instead of once with the full text at
+   * the end, so the caller can start TTS on sentence 1 while later sentences
+   * are still being translated. Falls through to the same prompt-building as
+   * the batch translate() above; only the transport differs.
+   *
+   * React Native has no native EventSource and fetch() can't read a response
+   * body incrementally the way a browser can, hence react-native-sse (XHR-based
+   * under the hood, which *does* support incremental reads on RN) rather than
+   * hand-rolled stream parsing here.
+   */
+  async translateStreaming(
+    text: string,
+    sourceLanguage: string,
+    targetLanguage: string,
+    onSentence: (sentence: string) => void,
+  ): Promise<string> {
+    if (this.provider === 'device') {
+      // No streaming story for on-device translation — caller should not
+      // route here when provider is 'device'; this exists as a safety net.
+      const full = await this.deviceTranslate(text, sourceLanguage, targetLanguage, () => {});
+      onSentence(full);
+      return full;
+    }
+
+    if (!STREAM_URL) throw new Error('EXPO_PUBLIC_API_STREAM_URL is not set in .env');
+    const idToken = dynamoService.getIdToken();
+    if (!idToken) throw new Error('Not signed in — cannot reach AI services');
+
+    const { model, systemPrompt } = this.buildTranslationPrompt(sourceLanguage, targetLanguage);
+
+    return new Promise<string>((resolve, reject) => {
+      let full = '';
+      let pending = ''; // text received but not yet emitted as a complete sentence
+      let settled = false;
+
+      const es = new EventSource(STREAM_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text },
+          ],
+          temperature: 0.2,
+          max_tokens: 1024,
+        }),
+        // The server response itself has no fixed size — this is an idle-gap
+        // timeout (no event received in N ms), not a total-duration cap.
+        timeout: 20000,
+      });
+
+      const finish = (result: string | Error) => {
+        if (settled) return;
+        settled = true;
+        es.removeAllEventListeners();
+        es.close();
+        if (result instanceof Error) reject(result);
+        else resolve(result);
+      };
+
+      es.addEventListener('message', (event) => {
+        if (!event.data) return;
+        let payload: { delta?: string; done?: boolean; error?: string };
+        try {
+          payload = JSON.parse(event.data);
+        } catch {
+          return; // Ignore a malformed event rather than failing the whole stream over it
+        }
+
+        if (payload.error) {
+          finish(new Error(payload.error));
+          return;
+        }
+
+        if (payload.delta) {
+          full += payload.delta;
+          pending += payload.delta;
+
+          // Emit every complete sentence found in `pending`, keep the trailing
+          // partial fragment buffered for the next chunk.
+          let match: RegExpMatchArray | null = pending.match(SENTENCE_BOUNDARY);
+          while (match) {
+            const cut = (match.index ?? 0) + match[0].length;
+            const sentence = pending.slice(0, cut).trim();
+            pending = pending.slice(cut);
+            if (sentence) onSentence(sentence);
+            match = pending.match(SENTENCE_BOUNDARY);
+          }
+        }
+
+        if (payload.done) {
+          const leftover = pending.trim();
+          if (leftover) onSentence(leftover); // model's reply didn't end in sentence punctuation
+          finish(full.trim());
+        }
+      });
+
+      es.addEventListener('error', (event) => {
+        if (event.type === 'timeout') {
+          finish(new Error('Streaming translation timed out'));
+          return;
+        }
+
+        // 'error' (HTTP-level failure) has message + xhrStatus; 'exception'
+        // (thrown before/outside the XHR lifecycle) has message only.
+        const rawMessage = event.message || 'Streaming translation failed';
+        const xhrStatus = event.type === 'error' ? event.xhrStatus : undefined;
+
+        // Pre-stream failures (auth/plan/validation) come back as plain JSON
+        // in event.message — see streamChat.mjs's header comment for why
+        // those aren't SSE-formatted. A real transport error has none of
+        // that structure, so a JSON-parse failure just falls back to the raw text.
+        let detail = rawMessage;
+        try {
+          const parsed = JSON.parse(rawMessage);
+          if (parsed.error) detail = parsed.error;
+        } catch {
+          // not JSON — use rawMessage as-is
+        }
+        finish(new Error(`${detail}${xhrStatus ? ` (${xhrStatus})` : ''}`));
+      });
+    });
   }
 
   /** Translate via our backend's /v1/proxy/openai/chat route (keys live server-side). */

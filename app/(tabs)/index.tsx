@@ -165,6 +165,7 @@ export default function HomeScreen() {
         targetLanguage,
         settings?.tts_provider || 'device',
         user?.id,
+        settings?.plan || 'basic',
       );
       setIsRecording(true); // Set AFTER success so a failed start shows the error, not a red button
     } catch (error: any) {
@@ -196,6 +197,8 @@ export default function HomeScreen() {
         targetLanguage,
         settings?.tts_provider || 'device',
         user?.id,
+        undefined, // silenceTimeoutMs — use the service default
+        settings?.plan || 'basic',
       )
       .then(() => {
         setIsConversationRunning(false);
