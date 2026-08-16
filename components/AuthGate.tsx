@@ -8,9 +8,11 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { LogIn } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { LogIn, Languages } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { CountryCodeSelector } from '@/components/CountryCodeSelector';
+import { colors, radius, spacing, typography, cardShadow } from '@/lib/theme';
 
 /**
  * Blocks the whole app (every tab, not just Settings) behind sign-in.
@@ -58,7 +60,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -231,12 +233,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={styles.screen}>
+      <LinearGradient colors={[colors.primaryTint, colors.background]} style={styles.heroGradient} pointerEvents="none" />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={styles.header}>
+        <View style={styles.logoBadge}>
+          <Languages size={30} color={colors.textOnPrimary} />
+        </View>
         <Text style={styles.title}>AI Translator</Text>
         <Text style={styles.subtitle}>Sign in to start translating</Text>
       </View>
@@ -270,7 +277,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             onPress={handleNewPassword}
             disabled={authLoading}>
             {authLoading ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnPrimary} />
             ) : (
               <Text style={styles.primaryButtonText}>Set Password & Sign In</Text>
             )}
@@ -298,7 +305,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             onPress={handleConfirmSignUp}
             disabled={authLoading}>
             {authLoading ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnPrimary} />
             ) : (
               <Text style={styles.primaryButtonText}>Verify & Continue</Text>
             )}
@@ -326,7 +333,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             onPress={handleVerifyOtp}
             disabled={authLoading}>
             {authLoading ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnPrimary} />
             ) : (
               <Text style={styles.primaryButtonText}>Verify & Continue</Text>
             )}
@@ -380,7 +387,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             onPress={handleConfirmResetPassword}
             disabled={authLoading}>
             {authLoading ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnPrimary} />
             ) : (
               <Text style={styles.primaryButtonText}>Reset Password</Text>
             )}
@@ -412,7 +419,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             onPress={handleSendResetCode}
             disabled={authLoading}>
             {authLoading ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnPrimary} />
             ) : (
               <Text style={styles.primaryButtonText}>Send Reset Code</Text>
             )}
@@ -461,10 +468,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 onPress={handleAuth}
                 disabled={authLoading}>
                 {authLoading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <ActivityIndicator size="small" color={colors.textOnPrimary} />
                 ) : (
                   <>
-                    <LogIn size={20} color="#ffffff" />
+                    <LogIn size={20} color={colors.textOnPrimary} />
                     <Text style={styles.primaryButtonText}>
                       {isLogin ? 'Sign In' : 'Sign Up'}
                     </Text>
@@ -504,10 +511,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 onPress={handleSendOtp}
                 disabled={authLoading}>
                 {authLoading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <ActivityIndicator size="small" color={colors.textOnPrimary} />
                 ) : (
                   <>
-                    <LogIn size={20} color="#ffffff" />
+                    <LogIn size={20} color={colors.textOnPrimary} />
                     <Text style={styles.primaryButtonText}>Send Code</Text>
                   </>
                 )}
@@ -522,118 +529,135 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           </TouchableOpacity>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  heroGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 360,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
   },
   contentContainer: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: colors.background,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     alignItems: 'center',
   },
+  logoBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.xl,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    ...cardShadow,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+  },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.displayMedium,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.textSecondary,
   },
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.xxl,
+    ...cardShadow,
+    shadowOpacity: 0.08,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
   },
   sectionDescription: {
     fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 16,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
   },
   passwordHint: {
     fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
     marginTop: -8,
     lineHeight: 18,
   },
   fieldGroupLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9ca3af',
+    ...typography.label,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: 6,
     marginTop: 4,
   },
   authError: {
     fontSize: 13,
-    color: '#ef4444',
+    color: colors.error,
     marginBottom: 10,
     textAlign: 'center',
   },
   linkText: {
-    color: '#2563eb',
+    color: colors.primary,
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: spacing.lg,
   },
   input: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
     fontSize: 16,
+    color: colors.textPrimary,
   },
   phoneRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
     alignItems: 'flex-start',
   },
   phoneInput: {
     flex: 1,
   },
   primaryButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 14,
-    borderRadius: 8,
-    gap: 8,
+    padding: spacing.md + 2,
+    borderRadius: radius.sm,
+    gap: spacing.sm,
   },
   primaryButtonText: {
-    color: '#ffffff',
+    color: colors.textOnPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

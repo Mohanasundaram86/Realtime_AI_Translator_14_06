@@ -210,7 +210,7 @@ export default function HistoryScreen() {
   if (!user) {
     return (
       <View style={styles.emptyContainer}>
-        <Languages size={64} color="#d1d5db" />
+        <Languages size={64} color="#cbd5e1" />
         <Text style={styles.emptyTitle}>Sign In Required</Text>
         <Text style={styles.emptyText}>
           Please sign in from the Settings tab to view your translation history.
@@ -249,7 +249,7 @@ export default function HistoryScreen() {
 
       {history.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Languages size={64} color="#d1d5db" />
+          <Languages size={64} color="#cbd5e1" />
           <Text style={styles.emptyTitle}>No History Yet</Text>
           <Text style={styles.emptyText}>
             Your translation history will appear here after you make your first translation.
@@ -326,7 +326,7 @@ export default function HistoryScreen() {
                       numberOfLines={1}>
                       {getLanguageName(replayLang)}
                     </Text>
-                    <ChevronDown size={13} color={isDifferentLang ? '#2563eb' : '#6b7280'} />
+                    <ChevronDown size={13} color={isDifferentLang ? '#2563eb' : '#64748b'} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -352,7 +352,7 @@ export default function HistoryScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Replay Language</Text>
               <TouchableOpacity onPress={() => setLangPickerItem(null)} style={styles.modalCloseBtn}>
-                <X size={20} color="#6b7280" />
+                <X size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
             {langPickerItem && (
@@ -405,13 +405,13 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
   emptyContainer: {
     flex: 1,
@@ -422,13 +422,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#374151',
+    color: '#334155',
     marginTop: 20,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: '#64748b',
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -440,17 +440,17 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 56 : 40,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#e2e8f0',
   },
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#111827',
+    color: '#0f172a',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748b',
   },
   clearButton: {
     flexDirection: 'row',
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#64748b',
   },
   deleteButton: {
     padding: 4,
@@ -510,14 +510,14 @@ const styles = StyleSheet.create({
   textLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#9ca3af',
+    color: '#94a3b8',
     marginBottom: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
   textContent: {
     fontSize: 15,
-    color: '#111827',
+    color: '#0f172a',
     lineHeight: 22,
   },
 
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    borderTopColor: '#f1f5f9',
   },
   replayButton: {
     flexDirection: 'row',
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#f1f5f9',
     borderRadius: 8,
     paddingVertical: 9,
     paddingHorizontal: 10,
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
   },
   langPillText: {
     fontSize: 13,
-    color: '#374151',
+    color: '#334155',
     fontWeight: '500',
     flex: 1,
   },
@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
   modalHandle: {
     width: 36,
     height: 4,
-    backgroundColor: '#d1d5db',
+    backgroundColor: '#cbd5e1',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 10,
@@ -608,19 +608,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#f1f5f9',
   },
   modalTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#111827',
+    color: '#0f172a',
   },
   modalCloseBtn: {
     padding: 4,
   },
   modalSubtitle: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#94a3b8',
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 4,
@@ -634,14 +634,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 13,
     borderBottomWidth: 1,
-    borderBottomColor: '#f9fafb',
+    borderBottomColor: '#f8fafc',
   },
   langOptionSelected: {
     backgroundColor: '#eff6ff',
   },
   langOptionText: {
     fontSize: 15,
-    color: '#1f2937',
+    color: '#1e293b',
     flex: 1,
   },
   langOptionTextSelected: {
@@ -650,8 +650,8 @@ const styles = StyleSheet.create({
   },
   langOptionOriginalBadge: {
     fontSize: 11,
-    color: '#9ca3af',
-    backgroundColor: '#f3f4f6',
+    color: '#94a3b8',
+    backgroundColor: '#f1f5f9',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

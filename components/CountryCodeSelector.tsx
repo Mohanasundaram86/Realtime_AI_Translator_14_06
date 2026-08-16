@@ -44,7 +44,7 @@ export const CountryCodeSelector: React.FC<CountryCodeSelectorProps> = ({
     <View>
       <TouchableOpacity style={styles.selector} onPress={() => setModalVisible(true)}>
         <Text style={styles.selectedText}>{selected.flag} {selected.dialCode}</Text>
-        <ChevronDown size={18} color="#6b7280" />
+        <ChevronDown size={18} color="#64748b" />
       </TouchableOpacity>
 
       <Modal
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#cbd5e1',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 14,
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   },
   selectedText: {
     fontSize: 16,
-    color: '#111827',
+    color: '#0f172a',
     marginRight: 6,
   },
   modalOverlay: {
@@ -120,12 +120,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#e2e8f0',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: '#0f172a',
   },
   doneButton: {
     fontSize: 16,
@@ -138,18 +138,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#f1f5f9',
   },
   itemSelected: {
     backgroundColor: '#eff6ff',
   },
   itemText: {
     fontSize: 16,
-    color: '#111827',
+    color: '#0f172a',
   },
   itemDialCode: {
     fontSize: 16,
-    color: '#6b7280',
+    color: '#64748b',
     fontWeight: '600',
   },
 });

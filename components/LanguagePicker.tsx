@@ -42,7 +42,7 @@ export const LanguagePicker: React.FC<LanguagePickerProps> = ({
               : `${selectedLang.nativeName} (${selectedLang.name})`
             : 'Select Language'}
         </Text>
-        <ChevronDown size={20} color="#6b7280" />
+        <ChevronDown size={20} color="#64748b" />
       </TouchableOpacity>
 
       <Modal
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#334155',
     marginBottom: 8,
   },
   selector: {
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#cbd5e1',
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   },
   selectedText: {
     fontSize: 16,
-    color: '#111827',
+    color: '#0f172a',
     flex: 1,
   },
   modalOverlay: {
@@ -138,12 +138,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#e2e8f0',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: '#0f172a',
   },
   doneButton: {
     fontSize: 16,
@@ -159,13 +159,13 @@ const styles = StyleSheet.create({
   noLanguagesText: {
     padding: 20,
     textAlign: 'center',
-    color: '#9ca3af',
+    color: '#94a3b8',
     fontSize: 16,
   },
   languageItem: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#f1f5f9',
     backgroundColor: '#ffffff',
   },
   languageItemSelected: {
@@ -174,11 +174,11 @@ const styles = StyleSheet.create({
   languageName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#111827',
+    color: '#0f172a',
     marginBottom: 4,
   },
   languageEnglishName: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748b',
   },
 });

@@ -268,7 +268,7 @@ export default function SettingsScreen() {
                 <Switch
                   value={viewMode === 'admin'}
                   onValueChange={(v) => setViewMode(v ? 'admin' : 'user')}
-                  trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
+                  trackColor={{ false: '#cbd5e1', true: '#93c5fd' }}
                   thumbColor={viewMode === 'admin' ? '#2563eb' : '#f4f3f4'}
                 />
               </View>
@@ -451,7 +451,7 @@ export default function SettingsScreen() {
               <Switch
                 value={conversationModeDefault}
                 onValueChange={setConversationModeDefault}
-                trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
+                trackColor={{ false: '#cbd5e1', true: '#93c5fd' }}
                 thumbColor={conversationModeDefault ? '#2563eb' : '#f4f3f4'}
               />
             </View>
@@ -536,10 +536,10 @@ export default function SettingsScreen() {
               useful than a description of the symptom.
             </Text>
             <TouchableOpacity
-              style={[styles.secondaryButton, { borderColor: '#d1d5db' }]}
+              style={[styles.secondaryButton, { borderColor: '#cbd5e1' }]}
               onPress={handleShareDiagnostics}>
-              <Bug size={18} color="#374151" />
-              <Text style={[styles.secondaryButtonText, { color: '#374151' }]}>Share Diagnostics</Text>
+              <Bug size={18} color="#334155" />
+              <Text style={[styles.secondaryButtonText, { color: '#334155' }]}>Share Diagnostics</Text>
             </TouchableOpacity>
           </View>
 
@@ -559,7 +559,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
   contentContainer: {
     padding: 20,
@@ -572,12 +572,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#111827',
+    color: '#0f172a',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: '#64748b',
   },
   card: {
     backgroundColor: '#ffffff',
@@ -593,17 +593,17 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#111827',
+    color: '#0f172a',
     marginBottom: 8,
   },
   sectionDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748b',
     marginBottom: 16,
   },
   userEmail: {
     fontSize: 16,
-    color: '#374151',
+    color: '#334155',
     marginBottom: 16,
   },
   planBadgeRow: {
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#334155',
     marginBottom: 8,
     marginTop: 8,
   },
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
     borderRadius: 8,
     gap: 12,
   },
@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#d1d5db',
+    borderColor: '#cbd5e1',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -694,16 +694,16 @@ const styles = StyleSheet.create({
   },
   radioLabel: {
     fontSize: 16,
-    color: '#374151',
+    color: '#334155',
   },
   voiceDesc: {
     fontSize: 12,
-    color: '#6b7280',
+    color: '#64748b',
     marginTop: 1,
   },
   voiceHint: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#64748b',
     marginBottom: 12,
     fontStyle: 'italic',
   },
@@ -745,11 +745,11 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#111827',
+    color: '#0f172a',
   },
   switchDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748b',
     marginTop: 4,
   },
   voiceStatus: {
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
   },
   cloningSubtext: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748b',
   },
   footer: {
     marginTop: 40,
@@ -783,11 +783,11 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#334155',
   },
   footerSubtext: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#94a3b8',
     marginTop: 4,
   },
 });

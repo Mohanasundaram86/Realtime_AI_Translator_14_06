@@ -12,9 +12,11 @@ import {
   AppState,
   AppStateStatus,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Mic, Square, Users, User } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { LanguagePicker } from '@/components/LanguagePicker';
+import { colors, radius, spacing, typography, cardShadow, floatingShadow } from '@/lib/theme';
 import {
   realtimeTranslationService,
   TranslationProgress,
@@ -260,6 +262,14 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Soft hero gradient behind the header — the "confident but calm" top
+          treatment shared by iTranslate/Google Translate rather than a flat
+          background straight to the edge. */}
+      <LinearGradient
+        colors={[colors.primaryTint, colors.background]}
+        style={styles.heroGradient}
+        pointerEvents="none"
+      />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -297,8 +307,8 @@ export default function HomeScreen() {
         <View style={[styles.card, styles.modeCard, conversationMode && styles.modeCardActive]}>
           <View style={styles.modeLeft}>
             {conversationMode
-              ? <Users color="#2563eb" size={24} />
-              : <User  color="#6b7280" size={24} />}
+              ? <Users color={colors.primary} size={24} />
+              : <User  color={colors.textSecondary} size={24} />}
             <View style={styles.modeText}>
               <Text style={styles.modeTitle}>
                 {conversationMode ? 'Conversation Mode' : 'Single Translation'}
@@ -314,8 +324,8 @@ export default function HomeScreen() {
             value={conversationMode}
             onValueChange={setConversationMode}
             disabled={isActive}
-            trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-            thumbColor={conversationMode ? '#2563eb' : '#f3f4f6'}
+            trackColor={{ false: colors.neutral300, true: colors.primaryLight }}
+            thumbColor={conversationMode ? colors.primary : colors.neutral100}
           />
         </View>
 
@@ -344,12 +354,12 @@ export default function HomeScreen() {
             styles.statusText,
             {
               color: isActive
-                ? '#ef4444'
+                ? colors.error
                 : progress?.stage === 'error'
-                ? '#dc2626'
+                ? colors.errorStrong
                 : progress?.stage === 'complete'
-                ? '#16a34a'
-                : '#6b7280',
+                ? colors.success
+                : colors.textSecondary,
             },
           ]}>
             {getStatusText()}
@@ -407,8 +417,15 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: colors.background,
     alignItems: 'center',
+  },
+  heroGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 320,
   },
   scrollView: {
     flex: 1,
@@ -416,37 +433,31 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
   },
   title: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: '#1e3a5f',
-    letterSpacing: -0.5,
+    ...typography.displayLarge,
+    color: colors.textPrimary,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#64748b',
-    marginTop: 4,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
   card: {
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md + 2,
+    ...cardShadow,
     overflow: 'visible',
   },
   pickerSection: {
@@ -455,153 +466,144 @@ const styles = StyleSheet.create({
   },
   pickerDivider: {
     height: 1,
-    backgroundColor: '#f1f5f9',
-    marginHorizontal: 12,
+    backgroundColor: colors.background,
+    marginHorizontal: spacing.md,
   },
   modeCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: spacing.lg,
     borderWidth: 2,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border,
   },
   modeCardActive: {
-    borderColor: '#93c5fd',
-    backgroundColor: '#f0f7ff',
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryTint,
   },
   modeLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   modeText: {
-    marginLeft: 12,
+    marginLeft: spacing.md,
     flex: 1,
   },
   modeTitle: {
+    ...typography.subtitle,
     fontSize: 15,
-    fontWeight: '700',
-    color: '#1e293b',
+    color: colors.textPrimary,
     marginBottom: 2,
   },
   modeSub: {
     fontSize: 12,
-    color: '#64748b',
+    color: colors.textSecondary,
     lineHeight: 16,
   },
   hintBox: {
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
-    backgroundColor: '#eff6ff',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginBottom: 14,
+    backgroundColor: colors.primaryTint,
+    borderRadius: radius.sm + 2,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md + 2,
+    marginBottom: spacing.md + 2,
     borderLeftWidth: 3,
-    borderLeftColor: '#2563eb',
+    borderLeftColor: colors.primary,
   },
   hintText: {
     fontSize: 13,
-    color: '#1e40af',
+    color: colors.primaryDark,
     fontWeight: '500',
     lineHeight: 18,
   },
   interruptButton: {
     alignSelf: 'center',
     borderWidth: 1,
-    borderColor: '#2563eb',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
   },
   interruptButtonText: {
-    color: '#2563eb',
+    color: colors.primary,
     fontSize: 13,
     fontWeight: '600',
   },
   micSection: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: spacing.xl,
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
   },
   micButton: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#2563eb',
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
+    ...floatingShadow(colors.primary),
   },
   micButtonActive: {
-    backgroundColor: '#ef4444',
-    shadowColor: '#ef4444',
+    backgroundColor: colors.error,
+    shadowColor: colors.error,
   },
   statusText: {
-    marginTop: 14,
+    marginTop: spacing.md + 2,
     fontSize: 15,
     fontWeight: '500',
     textAlign: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   results: {
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
   },
   personBadge: {
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginBottom: 10,
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm + 2,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md + 2,
+    marginBottom: spacing.sm + 2,
     alignSelf: 'flex-start',
   },
   personBadgeText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.textOnPrimary,
   },
   personBadgeSub: {
     fontSize: 12,
-    color: '#dbeafe',
+    color: colors.primaryTint,
     marginTop: 2,
   },
   textBox: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    backgroundColor: colors.surface,
+    borderRadius: radius.md + 2,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...cardShadow,
     shadowOpacity: 0.07,
-    shadowRadius: 4,
-    elevation: 3,
     borderLeftWidth: 4,
-    borderLeftColor: '#94a3b8',
+    borderLeftColor: colors.neutral400,
   },
   translatedBox: {
-    borderLeftColor: '#2563eb',
-    backgroundColor: '#eff6ff',
+    borderLeftColor: colors.primary,
+    backgroundColor: colors.primaryTint,
   },
   textBoxLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
+    ...typography.label,
+    color: colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   textBoxContent: {
     fontSize: 17,
-    color: '#1e293b',
+    color: colors.textPrimary,
     lineHeight: 26,
   },
 });
