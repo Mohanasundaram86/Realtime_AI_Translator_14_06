@@ -155,6 +155,36 @@ Resources:
             Auth:
               Authorizer: NONE
 
+  # ── Streaming chat Function URL — Phase 1 "Plus" tier ──────────────
+  # Lambda Function URLs with InvokeMode=RESPONSE_STREAM can't sit behind API
+  # Gateway (it buffers the whole response, defeating streaming entirely), so
+  # this is invoked directly rather than through TranslatorApi. That also means
+  # it doesn't get the CognitoJwtAuthorizer API Gateway provides for free —
+  # streamChat.mjs verifies the bearer token itself (see its header comment).
+  StreamChatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "ai-translator-stream-chat-${Stage}"
+      CodeUri:      ./
+      Handler:      src/handlers/streamChat.handler
+      MemorySize:   512
+      Timeout:      60
+      Policies:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Ref DynamoDBPolicy
+      Environment:
+        Variables:
+          OPENAI_API_KEY:      !Ref OpenAIApiKey
+          USER_POOL_ID:        !Ref UserPoolId
+          USER_POOL_CLIENT_ID: !Ref UserPoolClientId
+      FunctionUrlConfig:
+        AuthType:   NONE
+        InvokeMode: RESPONSE_STREAM
+        Cors:
+          AllowOrigins: ['*']
+          AllowMethods: ['POST']
+          AllowHeaders: ['authorization', 'content-type']
+
   # ── Cognito Custom Auth (phone + OTP) Lambda triggers ──
   # These are invoked directly by Cognito, not via API Gateway, so each
   # needs its own function + explicit Handler override (Globals.Function.Handler
@@ -400,6 +430,10 @@ Outputs:
   FunctionArn:
     Description: "Lambda function ARN"
     Value:        !GetAtt TranslatorFunction.Arn
+
+  StreamChatUrl:
+    Description: "Streaming chat Function URL — set as EXPO_PUBLIC_STREAM_CHAT_URL in .env (Phase 1 client work)"
+    Value:        !GetAtt StreamChatFunctionUrl.FunctionUrl
 
   AudioBucketName:
     Description: "S3 bucket storing translation audio (source + TTS)"
