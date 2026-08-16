@@ -11,18 +11,28 @@ import {
   Share,
   Platform,
 } from 'react-native';
-import { LogOut, Save, Mic, Trash2, Bug } from 'lucide-react-native';
+import { LogOut, Save, Mic, Trash2, Bug, Zap } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { audioService } from '@/services/audioService';
 import { ttsService, TTSService } from '@/services/ttsService';
+import { dynamoService } from '@/services/dynamoService';
+import { SubscriptionPlan } from '@/types';
 import { logger } from '@/lib/logger';
+
+const PLAN_INFO: Record<SubscriptionPlan, { label: string; description: string }> = {
+  basic: { label: 'Basic', description: "Today's pipeline — record, transcribe, translate, then speak." },
+  plus:  { label: 'Plus',  description: 'Streaming pipeline — starts speaking the translation before it finishes generating.' },
+  live:  { label: 'Live',  description: 'Continuous live interpretation, no record/stop steps. (Coming soon)' },
+};
 
 export default function SettingsScreen() {
   // AuthGate (app/_layout.tsx) guarantees `user` is non-null by the time any
   // screen renders — sign-in/sign-up/OTP/password-reset UI lives there now,
   // not here.
-  const { user, settings, signOut, updateSettings, viewMode, setViewMode } = useAuth();
+  const { user, settings, signOut, updateSettings, viewMode, setViewMode, refreshSettings } = useAuth();
   const isUserView = user?.role === 'USER' || viewMode === 'user';
+  const currentPlan: SubscriptionPlan = settings?.plan || 'basic';
+  const [pendingPlan, setPendingPlan] = useState<SubscriptionPlan | null>(null);
 
   const [ttsProvider, setTtsProvider] = useState<'elevenlabs' | 'openai' | 'device' | 'azure'>('device');
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('female');
@@ -56,6 +66,26 @@ export default function SettingsScreen() {
       ttsService.setSelectedVoiceId(settings.selected_voice_id || null);
     }
   }, [settings]);
+
+  // OWNER-only testing tool — see backend/src/handlers/settings.mjs's
+  // adminSetPlan(). No billing integration exists yet, so this is how the
+  // Phase 0/1/2 plan gates actually get tested until a real purchase flow
+  // (RevenueCat/Stripe/etc.) writes this field instead.
+  const handleSetPlan = async (plan: SubscriptionPlan) => {
+    if (plan === currentPlan || pendingPlan) return;
+    setPendingPlan(plan);
+    try {
+      const result = await dynamoService.adminSetPlan(plan);
+      if (!result) throw new Error('Server rejected the request');
+      await refreshSettings();
+      Alert.alert('Plan updated', `You're now on the ${PLAN_INFO[plan].label} plan.`);
+    } catch (error) {
+      console.error('Set plan error:', error);
+      Alert.alert('Error', 'Failed to change plan. Are you still signed in as an OWNER?');
+    } finally {
+      setPendingPlan(null);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -216,6 +246,17 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Your Plan</Text>
+            <View style={styles.planBadgeRow}>
+              <View style={styles.planBadge}>
+                <Zap size={14} color="#2563eb" />
+                <Text style={styles.planBadgeText}>{PLAN_INFO[currentPlan].label}</Text>
+              </View>
+            </View>
+            <Text style={styles.sectionDescription}>{PLAN_INFO[currentPlan].description}</Text>
+          </View>
+
           {user?.role === 'OWNER' && (
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Developer Mode</Text>
@@ -230,6 +271,26 @@ export default function SettingsScreen() {
                   trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
                   thumbColor={viewMode === 'admin' ? '#2563eb' : '#f4f3f4'}
                 />
+              </View>
+
+              <Text style={[styles.inputLabel, { marginTop: 20 }]}>Change Plan (testing only — no billing yet)</Text>
+              <View style={styles.radioGroup}>
+                {(Object.keys(PLAN_INFO) as SubscriptionPlan[]).map((plan) => (
+                  <TouchableOpacity
+                    key={plan}
+                    style={styles.radioOption}
+                    disabled={pendingPlan !== null}
+                    onPress={() => handleSetPlan(plan)}>
+                    <View style={[styles.radio, currentPlan === plan && styles.radioSelected]}>
+                      {currentPlan === plan && <View style={styles.radioDot} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.radioLabel}>{PLAN_INFO[plan].label}</Text>
+                      <Text style={styles.voiceDesc}>{PLAN_INFO[plan].description}</Text>
+                    </View>
+                    {pendingPlan === plan && <ActivityIndicator size="small" color="#2563eb" />}
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
           )}
@@ -544,6 +605,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#374151',
     marginBottom: 16,
+  },
+  planBadgeRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  planBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eef2ff',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  planBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2563eb',
   },
   secondaryButton: {
     backgroundColor: '#ffffff',

@@ -152,6 +152,25 @@ class DynamoService {
     }
   }
 
+  /**
+   * OWNER-only: set a user's subscription plan. There's no billing integration
+   * yet (Stripe/RevenueCat/etc.) — this exists purely so the plan gate itself
+   * can be tested end-to-end. Backend independently re-checks the OWNER role;
+   * this call fails harmlessly for a plain USER (403), it doesn't need to be
+   * hidden from them for correctness, only for UX (see settings.tsx).
+   */
+  async adminSetPlan(plan: 'basic' | 'plus' | 'live', targetUserId?: string): Promise<UserSettings | null> {
+    try {
+      return await this.request<UserSettings>('/v1/admin/set-plan', {
+        method: 'PATCH',
+        body:   JSON.stringify({ plan, ...(targetUserId ? { user_id: targetUserId } : {}) }),
+      });
+    } catch (error) {
+      console.error('❌ adminSetPlan error:', error);
+      return null;
+    }
+  }
+
   // ── CONVERSATION HISTORY ────────────────────────────────────────────────────
 
   async getConversationHistory(userId: string, limit?: number): Promise<ConversationHistory[]> {

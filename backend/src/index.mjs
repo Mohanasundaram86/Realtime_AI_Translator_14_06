@@ -38,6 +38,7 @@
  *   GET    /v1/admin/user-analytics                    getUserAnalytics
  *   GET    /v1/admin/dashboard-metrics                  getDashboardMetrics
  *   GET    /v1/admin/infra-metrics                      getInfraMetrics
+ *   PATCH  /v1/admin/set-plan                           adminSetPlan (no billing yet — dev/testing only)
  *
  * Auth (unauthenticated — no token exists yet)
  *   POST   /v1/auth/phone/request-otp                 requestPhoneOtp
@@ -63,6 +64,7 @@ import {
   putSettings,
   patchSettings,
   resetSettings,
+  adminSetPlan,
 } from './handlers/settings.mjs';
 
 import { requestPhoneOtp } from './handlers/phoneAuth.mjs';
@@ -136,6 +138,7 @@ export const handler = async (event) => {
   if (method === 'GET' && path === '/v1/admin/user-analytics')    return getUserAnalytics(event);
   if (method === 'GET' && path === '/v1/admin/dashboard-metrics') return getDashboardMetrics(event);
   if (method === 'GET' && path === '/v1/admin/infra-metrics')     return getInfraMetrics(event);
+  if (method === 'PATCH' && path === '/v1/admin/set-plan')        return adminSetPlan(event);
 
   // ── Settings ──────────────────────────────────────────
   if (path === '/v1/settings') {

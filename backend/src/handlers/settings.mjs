@@ -1,7 +1,8 @@
 import { PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { db, SETTINGS_TABLE } from '../db.mjs';
-import { getUserId } from '../auth.mjs';
+import { getUserId, getRole } from '../auth.mjs';
 import { sendSuccess, sendNoContent, sendError, handleError } from '../response.mjs';
+import { PLANS } from '../lib/entitlement.mjs';
 
 // ─────────────────────────────────────────────────────────
 // GET /v1/settings
@@ -134,6 +135,45 @@ export async function patchSettings(event) {
       UpdateExpression:          `SET ${expressionParts.join(', ')}`,
       ExpressionAttributeNames:  expressionNames,
       ExpressionAttributeValues: expressionValues,
+      ReturnValues:              'ALL_NEW',
+    }));
+
+    return sendSuccess(result.Attributes);
+  } catch (err) {
+    return handleError(err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// PATCH /v1/admin/set-plan  (OWNER only)
+//
+// There's no billing integration yet (Stripe/RevenueCat/etc.) — this is the
+// stand-in that lets an OWNER-role account flip its own (or, for future
+// support-desk use, another user's) plan for testing Phase 1/2 pipelines.
+// Deliberately NOT reachable by a plain USER: unlike PUT/PATCH /v1/settings
+// which silently ignore any `plan` in the body, this route writes it, so it
+// must never be exposed to non-owners.
+// ─────────────────────────────────────────────────────────
+export async function adminSetPlan(event) {
+  try {
+    const callerId = getUserId(event);
+    if (getRole(event) !== 'OWNER') return sendError(403, 'OWNER role required');
+
+    const body = JSON.parse(event.body || '{}');
+    const { plan } = body;
+    // user_id defaults to self — an OWNER testing their own account is the
+    // expected common case; targeting another user's is opt-in via the body.
+    const targetUserId = body.user_id || callerId;
+
+    if (!PLANS.includes(plan)) {
+      return sendError(400, `plan must be one of: ${PLANS.join(', ')}`);
+    }
+
+    const result = await db.send(new UpdateCommand({
+      TableName:                 SETTINGS_TABLE,
+      Key:                       { user_id: targetUserId },
+      UpdateExpression:          'SET plan = :p, updated_at = :u',
+      ExpressionAttributeValues: { ':p': plan, ':u': new Date().toISOString() },
       ReturnValues:              'ALL_NEW',
     }));
 
