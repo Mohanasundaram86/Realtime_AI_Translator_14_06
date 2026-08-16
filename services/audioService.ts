@@ -226,21 +226,33 @@ export class AudioService {
         this.sound = null;
       }
 
-      // 3. CRITICAL: Switch audio mode from recording to playback
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,     // Must be false for playback!
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: false, // Use speaker
-      });
+      // 3. CRITICAL: Switch audio mode from recording to playback — but only
+      // when actually switching. This used to run unconditionally on every
+      // call, which was harmless for the old one-clip-per-turn flow but
+      // became a real bug once Phase 1's sentence-pipelined playback started
+      // calling playAudio() several times per turn: re-issuing
+      // setAudioModeAsync() back-to-back while already in 'playback' mode
+      // caused audible glitches on some Android audio stacks (reported as
+      // a droning/"engine sound" artifact) between sentence clips — the
+      // audio subsystem doesn't expect to be re-configured mid-stream like that.
+      if (this.audioMode !== 'playback') {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,     // Must be false for playback!
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false, // Use speaker
+        });
 
-      this.audioMode = 'playback';
-      console.log('🔊 Audio mode set for playback');
+        this.audioMode = 'playback';
+        console.log('🔊 Audio mode set for playback');
 
-      // Platform-aware delay after mode switch
-      if (Platform.OS === 'android') {
-        await new Promise(r => setTimeout(r, 150));
+        // Platform-aware delay after mode switch — only needed when the mode
+        // actually just changed, not between back-to-back clips already in
+        // playback mode.
+        if (Platform.OS === 'android') {
+          await new Promise(r => setTimeout(r, 150));
+        }
       }
 
       // 4. Load AND play in one step (recommended by Expo docs)
