@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { audioService } from '@/services/audioService';
 import { ttsService, TTSService } from '@/services/ttsService';
 import { dynamoService } from '@/services/dynamoService';
+import { subscribeToPlan, cancelSubscription as cancelRazorpaySubscription, CheckoutCancelledError } from '@/services/billingService';
 import { SubscriptionPlan } from '@/types';
 import { logger } from '@/lib/logger';
 
@@ -25,14 +26,22 @@ const PLAN_INFO: Record<SubscriptionPlan, { label: string; description: string }
   live:  { label: 'Live',  description: 'Continuous live interpretation, no record/stop steps. (Coming soon)' },
 };
 
+// Monthly price shown on the upgrade buttons — mirrors backend/src/lib/razorpay.mjs's
+// PAID_PLAN_PRICING (kept as a display-only literal here; the backend is the
+// only place that actually charges an amount, via the Razorpay Plan it created).
+const PAID_PLAN_PRICE: Record<'plus' | 'live', string> = { plus: '₹200/mo', live: '₹360/mo' };
+
 export default function SettingsScreen() {
   // AuthGate (app/_layout.tsx) guarantees `user` is non-null by the time any
   // screen renders — sign-in/sign-up/OTP/password-reset UI lives there now,
   // not here.
-  const { user, settings, signOut, updateSettings, viewMode, setViewMode, refreshSettings } = useAuth();
+  const { user, settings, signOut, deleteAccount, updateSettings, viewMode, setViewMode, refreshSettings } = useAuth();
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const isUserView = user?.role === 'USER' || viewMode === 'user';
   const currentPlan: SubscriptionPlan = settings?.plan || 'basic';
   const [pendingPlan, setPendingPlan] = useState<SubscriptionPlan | null>(null);
+  const [subscribingPlan, setSubscribingPlan] = useState<'plus' | 'live' | null>(null);
+  const [cancellingSubscription, setCancellingSubscription] = useState(false);
 
   const [ttsProvider, setTtsProvider] = useState<'elevenlabs' | 'openai' | 'device' | 'azure'>('device');
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('female');
@@ -87,6 +96,54 @@ export default function SettingsScreen() {
     }
   };
 
+  // Real purchase flow — see services/billingService.ts. Available to every
+  // signed-in user, independent of the OWNER-only testing switcher above.
+  const handleSubscribe = async (plan: 'plus' | 'live') => {
+    if (subscribingPlan || plan === currentPlan) return;
+    setSubscribingPlan(plan);
+    try {
+      await subscribeToPlan(plan);
+      await refreshSettings();
+      Alert.alert('Subscribed!', `You're now on the ${PLAN_INFO[plan].label} plan.`);
+    } catch (error) {
+      if (error instanceof CheckoutCancelledError) {
+        // User backed out of Checkout — not an error worth alerting about.
+        return;
+      }
+      console.error('Subscribe error:', error);
+      Alert.alert('Payment failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setSubscribingPlan(null);
+    }
+  };
+
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      'Cancel subscription?',
+      `You'll keep ${PLAN_INFO[currentPlan].label} access until the end of your current billing cycle, then move to Basic.`,
+      [
+        { text: 'Keep subscription', style: 'cancel' },
+        {
+          text: 'Cancel subscription',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingSubscription(true);
+            try {
+              await cancelRazorpaySubscription();
+              await refreshSettings();
+              Alert.alert('Cancelled', "You'll move to Basic at the end of your current billing cycle.");
+            } catch (error) {
+              console.error('Cancel subscription error:', error);
+              Alert.alert('Error', 'Failed to cancel subscription. Please try again.');
+            } finally {
+              setCancellingSubscription(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -94,6 +151,49 @@ export default function SettingsScreen() {
     } catch {
       Alert.alert('Error', 'Failed to sign out');
     }
+  };
+
+  // Irreversible — double-confirmed given what it actually does (cancels any
+  // active subscription immediately, permanently deletes translation history
+  // and audio, then deletes the account itself). See
+  // backend/src/handlers/account.mjs for the exact order of operations.
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account, translation history, and cancels any active subscription immediately. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              'There is no way to recover your account or data after this.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete my account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    try {
+                      await deleteAccount();
+                      // No success alert — deleteAccount() already signs out,
+                      // which unmounts this screen behind AuthGate's sign-in view.
+                    } catch (error) {
+                      console.error('Delete account error:', error);
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                      setDeletingAccount(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   const handleSaveSettings = async () => {
@@ -244,6 +344,19 @@ export default function SettingsScreen() {
               <LogOut size={20} color="#ef4444" />
               <Text style={styles.secondaryButtonText}>Sign Out</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              disabled={deletingAccount}
+              onPress={handleDeleteAccount}>
+              {deletingAccount ? (
+                <ActivityIndicator size="small" color="#ef4444" />
+              ) : (
+                <>
+                  <Trash2 size={20} color="#ef4444" />
+                  <Text style={styles.secondaryButtonText}>Delete Account</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View style={styles.card}>
@@ -255,6 +368,45 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Text style={styles.sectionDescription}>{PLAN_INFO[currentPlan].description}</Text>
+
+            {currentPlan === 'basic' ? (
+              // Real purchase flow — Razorpay recurring subscription checkout.
+              (['plus', 'live'] as const).map((plan) => (
+                <TouchableOpacity
+                  key={plan}
+                  style={[styles.secondaryButton, styles.upgradeButton]}
+                  disabled={subscribingPlan !== null}
+                  onPress={() => handleSubscribe(plan)}>
+                  {subscribingPlan === plan ? (
+                    <ActivityIndicator size="small" color="#2563eb" />
+                  ) : (
+                    <>
+                      <Zap size={18} color="#2563eb" />
+                      <Text style={[styles.secondaryButtonText, { color: '#2563eb' }]}>
+                        Upgrade to {PLAN_INFO[plan].label} — {PAID_PLAN_PRICE[plan]}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ))
+            ) : settings?.razorpay_subscription_id ? (
+              settings.razorpay_subscription_status === 'cancel_requested' ? (
+                <Text style={styles.sectionDescription}>
+                  Cancellation scheduled — you&apos;ll move to Basic at the end of your current billing cycle.
+                </Text>
+              ) : (
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  disabled={cancellingSubscription}
+                  onPress={handleCancelSubscription}>
+                  {cancellingSubscription ? (
+                    <ActivityIndicator size="small" color="#ef4444" />
+                  ) : (
+                    <Text style={[styles.secondaryButtonText, { color: '#ef4444' }]}>Cancel Subscription</Text>
+                  )}
+                </TouchableOpacity>
+              )
+            ) : null}
           </View>
 
           {user?.role === 'OWNER' && (
@@ -639,6 +791,10 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 16,
     fontWeight: '600',
+  },
+  upgradeButton: {
+    borderColor: '#2563eb',
+    marginTop: 12,
   },
   inputLabel: {
     fontSize: 14,

@@ -58,13 +58,17 @@ export async function putSettings(event) {
       return sendError(400, `voice_gender must be one of: ${VALID_GENDERS.join(', ')}`);
     }
 
-    // `plan` is billing-controlled, never accepted from the client (this is a
-    // full "replace all preferences" endpoint the client already calls freely —
-    // reading body.plan here would let any user grant themselves Plus/Live for
-    // free). Preserve whatever's already on record, defaulting to 'basic' for
-    // a brand-new user, regardless of what the request body contains.
+    // `plan` — and the Razorpay subscription bookkeeping alongside it — are
+    // billing-controlled, never accepted from the client (this is a full
+    // "replace all preferences" endpoint the client already calls freely —
+    // reading them from the body here would let any user grant themselves
+    // Plus/Live for free, or unlink their subscription). Preserve whatever's
+    // already on record, defaulting to 'basic'/undefined for a brand-new
+    // user, regardless of what the request body contains.
     const existing = await db.send(new GetCommand({ TableName: SETTINGS_TABLE, Key: { user_id: userId } }));
     const plan = existing.Item?.plan || 'basic';
+    const razorpaySubscriptionId     = existing.Item?.razorpay_subscription_id;
+    const razorpaySubscriptionStatus = existing.Item?.razorpay_subscription_status;
 
     const item = {
       user_id:                  userId,
@@ -75,6 +79,8 @@ export async function putSettings(event) {
       conversation_mode_default: body.conversation_mode_default ?? false,
       custom_voice_id:          body.custom_voice_id          || null,
       plan,
+      ...(razorpaySubscriptionId     ? { razorpay_subscription_id: razorpaySubscriptionId }         : {}),
+      ...(razorpaySubscriptionStatus ? { razorpay_subscription_status: razorpaySubscriptionStatus }  : {}),
       updated_at:               new Date().toISOString(),
     };
 
@@ -190,10 +196,13 @@ export async function resetSettings(event) {
   try {
     const userId = getUserId(event);
 
-    // Preserve plan across a preferences reset — this endpoint resets UI
-    // preferences (language, voice, etc.), not billing status.
+    // Preserve plan + Razorpay subscription linkage across a preferences
+    // reset — this endpoint resets UI preferences (language, voice, etc.),
+    // not billing status.
     const existing = await db.send(new GetCommand({ TableName: SETTINGS_TABLE, Key: { user_id: userId } }));
     const plan = existing.Item?.plan || 'basic';
+    const razorpaySubscriptionId     = existing.Item?.razorpay_subscription_id;
+    const razorpaySubscriptionStatus = existing.Item?.razorpay_subscription_status;
 
     const defaults = {
       user_id:                  userId,
@@ -204,6 +213,8 @@ export async function resetSettings(event) {
       conversation_mode_default: false,
       custom_voice_id:          null,
       plan,
+      ...(razorpaySubscriptionId     ? { razorpay_subscription_id: razorpaySubscriptionId }        : {}),
+      ...(razorpaySubscriptionStatus ? { razorpay_subscription_status: razorpaySubscriptionStatus } : {}),
       updated_at:               new Date().toISOString(),
     };
 
