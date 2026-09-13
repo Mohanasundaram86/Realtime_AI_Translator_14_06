@@ -41,6 +41,7 @@
  *   GET    /v1/admin/user-analytics                    getUserAnalytics
  *   GET    /v1/admin/dashboard-metrics                  getDashboardMetrics
  *   GET    /v1/admin/infra-metrics                      getInfraMetrics
+ *   GET    /v1/admin/payments                           getPaymentsOverview
  *   PATCH  /v1/admin/set-plan                           adminSetPlan (no billing yet — dev/testing only)
  *
  * Auth (unauthenticated — no token exists yet)
@@ -89,6 +90,7 @@ import {
 import { getUserAnalytics } from './handlers/adminAnalytics.mjs';
 import { getDashboardMetrics } from './handlers/dashboardMetrics.mjs';
 import { getInfraMetrics } from './handlers/infraMetrics.mjs';
+import { getPaymentsOverview } from './handlers/adminPayments.mjs';
 import { recordRouteRequest } from './lib/routeMetrics.mjs';
 
 import {
@@ -167,6 +169,7 @@ export const handler = async (event) => {
   if (method === 'GET' && path === '/v1/admin/user-analytics')    return getUserAnalytics(event);
   if (method === 'GET' && path === '/v1/admin/dashboard-metrics') return getDashboardMetrics(event);
   if (method === 'GET' && path === '/v1/admin/infra-metrics')     return getInfraMetrics(event);
+  if (method === 'GET' && path === '/v1/admin/payments')          return getPaymentsOverview(event);
   if (method === 'PATCH' && path === '/v1/admin/set-plan')        return adminSetPlan(event);
 
   // ── Account (required by app-store review policy for account deletion) ──
