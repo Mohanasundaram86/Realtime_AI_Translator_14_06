@@ -17,6 +17,9 @@
  *   DELETE /v1/translations/{timestamp}               deleteTranslation
  *   PATCH  /v1/translations/{timestamp}/favorite      toggleFavorite
  *
+ * Account
+ *   DELETE /v1/account                                 deleteAccount
+ *
  * Settings
  *   GET    /v1/settings                               getSettings
  *   PUT    /v1/settings                               putSettings
@@ -74,6 +77,7 @@ import {
 } from './handlers/settings.mjs';
 
 import { requestPhoneOtp } from './handlers/phoneAuth.mjs';
+import { deleteAccount } from './handlers/account.mjs';
 
 import {
   createSubscription,
@@ -164,6 +168,9 @@ export const handler = async (event) => {
   if (method === 'GET' && path === '/v1/admin/dashboard-metrics') return getDashboardMetrics(event);
   if (method === 'GET' && path === '/v1/admin/infra-metrics')     return getInfraMetrics(event);
   if (method === 'PATCH' && path === '/v1/admin/set-plan')        return adminSetPlan(event);
+
+  // ── Account (required by app-store review policy for account deletion) ──
+  if (method === 'DELETE' && path === '/v1/account') return deleteAccount(event);
 
   // ── Settings ──────────────────────────────────────────
   if (path === '/v1/settings') {

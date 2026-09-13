@@ -27,6 +27,11 @@ Parameters:
     Type: String
     Default: user_settings
 
+  UsageTable:
+    Type: String
+    Default: ai_usage
+    Description: Per-user, per-day AI-proxy call counters (see lib/usageLimits.mjs) — disposable, TTL-expired after ~2 days, not a source of truth for anything.
+
   # ── AI provider keys — held server-side only; never shipped to the client.
   # Pass via `sam deploy --parameter-overrides` (or samconfig.toml), not source control.
   OpenAIApiKey:
@@ -86,6 +91,20 @@ Parameters:
     Default: ""
     Description: Razorpay Plan ID for the 'live' tier (₹360/month) — created once via scripts/setup-razorpay-plans.mjs, immutable afterward.
 
+  # ── Cost monitoring — see the EstimatedChargesAlarm resource below for the
+  # two manual, one-time account-level prerequisites CloudFormation cannot
+  # set for you (billing alerts must be enabled, and this stack must deploy
+  # to us-east-1).
+  BillingAlarmEmail:
+    Type: String
+    Default: ""
+    Description: Email to notify when estimated AWS charges exceed BillingAlarmThresholdUSD. Leave blank to create the alarm with no destination (add a subscription manually later). AWS emails a confirmation link to this address after deploy — the alarm stays silent until it's clicked.
+
+  BillingAlarmThresholdUSD:
+    Type: Number
+    Default: 25
+    Description: Placeholder threshold (USD) for the estimated-charges billing alarm — tune based on your actual expected spend once you have real usage data.
+
 # ──────────────────────────────────────────────────────────
 # Globals — applied to every Lambda function
 # ──────────────────────────────────────────────────────────
@@ -101,6 +120,12 @@ Globals:
         TRANSLATIONS_TABLE: !Ref TranslationsTable
         SETTINGS_TABLE:     !Ref SettingsTable
         NODE_OPTIONS:       "--enable-source-maps"
+
+# ──────────────────────────────────────────────────────────
+# Conditions
+# ──────────────────────────────────────────────────────────
+Conditions:
+  HasBillingAlarmEmail: !Not [!Equals [!Ref BillingAlarmEmail, ""]]
 
 # ──────────────────────────────────────────────────────────
 # Resources
@@ -153,6 +178,7 @@ Resources:
           RAZORPAY_WEBHOOK_SECRET: !Ref RazorpayWebhookSecret
           RAZORPAY_PLAN_ID_PLUS:   !Ref RazorpayPlanIdPlus
           RAZORPAY_PLAN_ID_LIVE:   !Ref RazorpayPlanIdLive
+          USAGE_TABLE:             !Ref UsageTable
       Events:
         # Catch-all proxy — routes every path+method to the single handler
         ProxyRoot:
@@ -277,6 +303,36 @@ Resources:
       Policies:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
+  # ── Scheduled data-retention sweep ──────────────────────
+  # Account-agnostic (Scan-based, not per-user Query) so it can run on a
+  # schedule with no authenticated caller — see retentionSweep.mjs's header
+  # comment for why this has to be separate from the per-user
+  # DELETE /v1/translations/old route. Shares AudioRetentionDays with the
+  # S3 lifecycle rule below so there's one source of truth for how long data
+  # is actually kept, matching whatever the privacy policy states.
+  RetentionSweepFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "ai-translator-retention-sweep-${Stage}"
+      CodeUri:      ./
+      Handler:      src/handlers/retentionSweep.handler
+      Timeout:      120
+      Policies:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Ref DynamoDBPolicy
+        - !Ref S3AudioPolicy
+      Environment:
+        Variables:
+          RETENTION_DAYS: !Ref AudioRetentionDays
+      Events:
+        DailySweep:
+          Type: Schedule
+          Properties:
+            Schedule:    rate(1 day)
+            Name:        !Sub "ai-translator-retention-sweep-${Stage}"
+            Description: "Daily cleanup of conversation_history rows (+ S3 audio) past AudioRetentionDays"
+            Enabled:     true
+
   # ── DynamoDB Tables ─────────────────────────────────────
   ConversationHistoryTable:
     Type: AWS::DynamoDB::Table
@@ -364,6 +420,28 @@ Resources:
         - AttributeName: user_id
           KeyType:        HASH
 
+  # ── Disposable per-user/per-day AI-proxy call counters (lib/usageLimits.mjs) ──
+  # No PITR — this is a cost-control counter, not durable data; a lost counter
+  # on restore would just under-enforce for a day, not lose anything real.
+  AiUsageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:   !Ref UsageTable
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: day
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType:        HASH
+        - AttributeName: day
+          KeyType:        RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+
   # ── IAM policy for Lambda → DynamoDB ───────────────────
   DynamoDBPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -385,6 +463,7 @@ Resources:
               - !GetAtt ConversationHistoryTable.Arn
               - !Sub "${ConversationHistoryTable.Arn}/index/*"
               - !GetAtt UserSettingsTable.Arn
+              - !GetAtt AiUsageTable.Arn
 
   # ── IAM policy for Lambda → S3 audio bucket ─────────────
   # Scoped to objects only (bucket/*), not the bucket itself — no ListBucket,
@@ -470,9 +549,53 @@ Resources:
               - cognito-idp:AdminCreateUser
               - cognito-idp:AdminGetUser
               - cognito-idp:AdminSetUserPassword
+              - cognito-idp:AdminDeleteUser
               - cognito-idp:ListUsers
             Resource:
               - !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}"
+
+  # ── Cost monitoring ──────────────────────────────────────
+  # Two manual, one-time prerequisites CloudFormation cannot set for you:
+  #   1. This stack must deploy to us-east-1 — the AWS/Billing namespace's
+  #      EstimatedCharges metric is published ONLY there, regardless of which
+  #      region your actual resources run in (already true here — see
+  #      backend/samconfig.toml's region).
+  #   2. The account's Billing preferences must have "Receive Billing Alerts"
+  #      checked (Billing console → Billing preferences) — an account-level
+  #      setting with no CloudFormation equivalent. Until it's checked, this
+  #      metric simply never populates and the alarm stays permanently in
+  #      INSUFFICIENT_DATA, not ALARM — it isn't broken, it has no data yet.
+  BillingAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "ai-translator-billing-alarm-${Stage}"
+
+  BillingAlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasBillingAlarmEmail
+    Properties:
+      TopicArn: !Ref BillingAlarmTopic
+      Protocol: email
+      Endpoint: !Ref BillingAlarmEmail
+
+  EstimatedChargesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName:        !Sub "ai-translator-estimated-charges-${Stage}"
+      AlarmDescription: !Sub "Estimated AWS charges exceeded $${BillingAlarmThresholdUSD} — see the BillingAlarmThresholdUSD parameter to tune."
+      Namespace:         AWS/Billing
+      MetricName:        EstimatedCharges
+      Dimensions:
+        - Name:  Currency
+          Value: USD
+      Statistic:          Maximum
+      Period:             21600 # 6 hours — this metric itself only updates a few times/day
+      EvaluationPeriods:  1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold:          !Ref BillingAlarmThresholdUSD
+      TreatMissingData:   notBreaching
+      AlarmActions:
+        - !Ref BillingAlarmTopic
 
 # ──────────────────────────────────────────────────────────
 # Outputs

@@ -35,7 +35,8 @@ export default function SettingsScreen() {
   // AuthGate (app/_layout.tsx) guarantees `user` is non-null by the time any
   // screen renders — sign-in/sign-up/OTP/password-reset UI lives there now,
   // not here.
-  const { user, settings, signOut, updateSettings, viewMode, setViewMode, refreshSettings } = useAuth();
+  const { user, settings, signOut, deleteAccount, updateSettings, viewMode, setViewMode, refreshSettings } = useAuth();
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const isUserView = user?.role === 'USER' || viewMode === 'user';
   const currentPlan: SubscriptionPlan = settings?.plan || 'basic';
   const [pendingPlan, setPendingPlan] = useState<SubscriptionPlan | null>(null);
@@ -150,6 +151,49 @@ export default function SettingsScreen() {
     } catch {
       Alert.alert('Error', 'Failed to sign out');
     }
+  };
+
+  // Irreversible — double-confirmed given what it actually does (cancels any
+  // active subscription immediately, permanently deletes translation history
+  // and audio, then deletes the account itself). See
+  // backend/src/handlers/account.mjs for the exact order of operations.
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account, translation history, and cancels any active subscription immediately. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              'There is no way to recover your account or data after this.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete my account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    try {
+                      await deleteAccount();
+                      // No success alert — deleteAccount() already signs out,
+                      // which unmounts this screen behind AuthGate's sign-in view.
+                    } catch (error) {
+                      console.error('Delete account error:', error);
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                      setDeletingAccount(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   const handleSaveSettings = async () => {
@@ -299,6 +343,19 @@ export default function SettingsScreen() {
             <TouchableOpacity style={styles.secondaryButton} onPress={handleSignOut}>
               <LogOut size={20} color="#ef4444" />
               <Text style={styles.secondaryButtonText}>Sign Out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              disabled={deletingAccount}
+              onPress={handleDeleteAccount}>
+              {deletingAccount ? (
+                <ActivityIndicator size="small" color="#ef4444" />
+              ) : (
+                <>
+                  <Trash2 size={20} color="#ef4444" />
+                  <Text style={styles.secondaryButtonText}>Delete Account</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 

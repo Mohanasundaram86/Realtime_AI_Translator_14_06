@@ -209,6 +209,17 @@ class DynamoService {
     return this.request('/v1/billing/razorpay/cancel', { method: 'POST' });
   }
 
+  // ── ACCOUNT ──────────────────────────────────────────────────────────────
+
+  /** Permanently deletes the signed-in user's account: cancels any live
+   *  Razorpay subscription, purges conversation history + audio, deletes
+   *  settings, then deletes the Cognito user itself. Irreversible — the
+   *  caller (AuthContext.deleteAccount) signs the local session out
+   *  immediately after this resolves, since the account no longer exists. */
+  async deleteAccount(): Promise<void> {
+    await this.request('/v1/account', { method: 'DELETE' });
+  }
+
   // ── CONVERSATION HISTORY ────────────────────────────────────────────────────
 
   async getConversationHistory(userId: string, limit?: number): Promise<ConversationHistory[]> {
