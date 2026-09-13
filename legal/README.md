@@ -1,14 +1,20 @@
 # Legal pages — draft
 
-`policies.html` is a single self-contained page covering the Privacy Policy, Terms of Service, and Refund/Cancellation Policy for Realtime AI Translator. Everything in it is grounded in what the app actually does (see the code it's based on — the retention sweep, `settings.mjs`'s `plan`/`razorpay_subscription_*` fields, `billing.mjs`'s cancel-at-cycle-end behavior, the third-party processors actually wired up).
+`policies.html` is a single self-contained page covering the Privacy Policy, Terms of Service, and Refund/Cancellation Policy for The OneLingo (formerly referred to internally as Realtime AI Translator). Everything in it is grounded in what the app actually does (see the code it's based on — the retention sweep, `settings.mjs`'s `plan`/`razorpay_subscription_*` fields, `billing.mjs`'s cancel-at-cycle-end behavior, the third-party processors actually wired up).
 
-**Not ready to publish yet.** Every field shown with a dashed amber border (`[Your business or legal name]`, `support@yourdomain.com`, etc.) is a placeholder — search the file for `class="fill"` to find them all. Fill in:
+**Filled in so far** (from business details provided 2026-09-13):
+- Legal/business name: Futureminds Lab LLP
+- App/brand name throughout: The OneLingo
+- Support email: Admin@futuremindzlab.com
+- Grievance officer: Bhrathi, Bhrathi@futuremindzlab.com, Bangalore, Karnataka, India
+- AWS processing region: us-east-1 (N. Virginia, USA)
+- Effective date: 13 Sep 2026 (placeholder default — change to your actual publish/launch date if different)
 
-1. Your business/legal name (or your own name, if publishing as an individual)
-2. A support contact email
-3. A grievance-officer name + address (India's IT Rules 2021 — §7 of the Privacy Policy)
-4. The effective date
-5. Confirm or change the refund stance in §3 of the Refund Policy — as written it matches exactly what the cancel-subscription code does (cancel-at-cycle-end, no proration), not a made-up policy
+**One placeholder still open** — search the file for `class="fill"` to find it:
+1. **Full street address + PIN code** for the grievance officer (India's IT Rules 2021 §7 requires more than city/state) — currently reads "Bangalore, Karnataka, India — full street address + PIN code".
+
+Also worth a final look before this goes live:
+- Confirm the refund stance in §3 of the Refund Policy — as written it matches exactly what the cancel-subscription code does (cancel-at-cycle-end, no proration, 30-day error-report window, 5–7 business day refund turnaround), not a made-up policy. Change the code and this page together if you want different terms.
 
 **Where this lives:**
 - Live draft: see the Artifact link shared in chat — edit there and republish, or edit this file and ask for a republish.
