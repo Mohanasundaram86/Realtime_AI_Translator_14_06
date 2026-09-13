@@ -150,6 +150,26 @@ Resources:
             UserPoolArn: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}"
             Identity:
               Header: Authorization
+      # Stage-level throttling — nothing here before, so a single leaked
+      # token (or a bug looping requests) had no ceiling beyond the account's
+      # very high default API Gateway limits (10,000 burst / 5,000 rps).
+      # Placeholder numbers — tune against real traffic once you have it.
+      # The two truly public, unauthenticated POST routes (phone-otp request,
+      # Razorpay webhook) get their own tighter overrides below, since they
+      # need no Cognito token to reach at all.
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod:   '*'
+          ThrottlingBurstLimit: 50
+          ThrottlingRateLimit:  25
+        - ResourcePath: /v1/auth/phone/request-otp
+          HttpMethod:   POST
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit:  2
+        - ResourcePath: /v1/billing/razorpay/webhook
+          HttpMethod:   POST
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit:  10
 
   # ── Lambda Function ─────────────────────────────────────
   TranslatorFunction:
