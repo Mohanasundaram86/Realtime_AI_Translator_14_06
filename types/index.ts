@@ -37,6 +37,14 @@ export interface UserSettings {
    *  fetched from GET /v1/settings, optional here only so locally-constructed
    *  offline/default objects aren't forced to fabricate a value. */
   plan?: SubscriptionPlan;
+  /** Razorpay subscription ID backing `plan`, when `plan` isn't 'basic' — set
+   *  by the backend (createSubscription/verify/webhook), never by the client.
+   *  Absent for a 'basic' user or one whose plan came from adminSetPlan(). */
+  razorpay_subscription_id?: string;
+  /** Mirrors Razorpay's subscription lifecycle: 'active' | 'pending' |
+   *  'cancel_requested' | 'cancelled' | 'halted' | 'completed' | 'paused', etc.
+   *  See backend/src/handlers/billing.mjs for the authoritative state machine. */
+  razorpay_subscription_status?: string;
   updated_at: string;
 }
 

@@ -56,6 +56,36 @@ Parameters:
     Default: 90
     Description: Days to retain stored translation audio (source + TTS) in S3 before automatic expiration
 
+  # ── Razorpay recurring subscriptions — see backend/scripts/setup-razorpay-plans.mjs
+  # and DOCUMENTATION.md's Razorpay section. Key/secret/webhook-secret are held
+  # server-side only, same treatment as the AI provider keys above.
+  RazorpayKeyId:
+    Type: String
+    Default: ""
+    Description: Razorpay Key ID (rzp_test_... or rzp_live_...) — public, but still passed as a parameter to keep all Razorpay config in one place. Leave blank to disable billing routes.
+
+  RazorpayKeySecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Razorpay Key Secret — used to create subscriptions and verify post-checkout payment signatures. Never sent to the client.
+
+  RazorpayWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Webhook secret configured in the Razorpay Dashboard for the /v1/billing/razorpay/webhook endpoint — distinct from RazorpayKeySecret.
+
+  RazorpayPlanIdPlus:
+    Type: String
+    Default: ""
+    Description: Razorpay Plan ID for the 'plus' tier (₹200/month) — created once via scripts/setup-razorpay-plans.mjs, immutable afterward.
+
+  RazorpayPlanIdLive:
+    Type: String
+    Default: ""
+    Description: Razorpay Plan ID for the 'live' tier (₹360/month) — created once via scripts/setup-razorpay-plans.mjs, immutable afterward.
+
 # ──────────────────────────────────────────────────────────
 # Globals — applied to every Lambda function
 # ──────────────────────────────────────────────────────────
@@ -118,6 +148,11 @@ Resources:
           AZURE_SPEECH_REGION: !Ref AzureSpeechRegion
           AUDIO_BUCKET:        !Ref AudioBucket
           API_GATEWAY_NAME:    !Sub "ai-translator-api-${Stage}"
+          RAZORPAY_KEY_ID:         !Ref RazorpayKeyId
+          RAZORPAY_KEY_SECRET:     !Ref RazorpayKeySecret
+          RAZORPAY_WEBHOOK_SECRET: !Ref RazorpayWebhookSecret
+          RAZORPAY_PLAN_ID_PLUS:   !Ref RazorpayPlanIdPlus
+          RAZORPAY_PLAN_ID_LIVE:   !Ref RazorpayPlanIdLive
       Events:
         # Catch-all proxy — routes every path+method to the single handler
         ProxyRoot:
@@ -151,6 +186,26 @@ Resources:
           Properties:
             RestApiId: !Ref TranslatorApi
             Path:      /v1/auth/phone/request-otp
+            Method:    OPTIONS
+            Auth:
+              Authorizer: NONE
+        # Unauthenticated Razorpay webhook — Razorpay's servers call this
+        # directly (no Cognito token exists for a server-to-server webhook),
+        # same explicit-override pattern as the phone-OTP route above. The
+        # handler verifies X-Razorpay-Signature itself (see billing.mjs).
+        RazorpayWebhook:
+          Type:       Api
+          Properties:
+            RestApiId: !Ref TranslatorApi
+            Path:      /v1/billing/razorpay/webhook
+            Method:    POST
+            Auth:
+              Authorizer: NONE
+        RazorpayWebhookOptions:
+          Type:       Api
+          Properties:
+            RestApiId: !Ref TranslatorApi
+            Path:      /v1/billing/razorpay/webhook
             Method:    OPTIONS
             Auth:
               Authorizer: NONE

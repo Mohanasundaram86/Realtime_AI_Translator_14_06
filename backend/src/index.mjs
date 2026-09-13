@@ -42,6 +42,12 @@
  *
  * Auth (unauthenticated — no token exists yet)
  *   POST   /v1/auth/phone/request-otp                 requestPhoneOtp
+ *
+ * Billing / Razorpay recurring subscriptions
+ *   POST   /v1/billing/razorpay/create-subscription    createSubscription
+ *   POST   /v1/billing/razorpay/verify                 verifySubscriptionPayment
+ *   POST   /v1/billing/razorpay/cancel                 cancelSubscription
+ *   POST   /v1/billing/razorpay/webhook                 handleWebhook (unauthenticated — Razorpay calls this directly)
  */
 
 import {
@@ -68,6 +74,13 @@ import {
 } from './handlers/settings.mjs';
 
 import { requestPhoneOtp } from './handlers/phoneAuth.mjs';
+
+import {
+  createSubscription,
+  verifySubscriptionPayment,
+  cancelSubscription,
+  handleWebhook as handleRazorpayWebhook,
+} from './handlers/billing.mjs';
 
 import { getUserAnalytics } from './handlers/adminAnalytics.mjs';
 import { getDashboardMetrics } from './handlers/dashboardMetrics.mjs';
@@ -125,6 +138,18 @@ export const handler = async (event) => {
   if (method === 'POST' && path === '/v1/auth/phone/request-otp') {
     return requestPhoneOtp(event);
   }
+
+  // ── Razorpay webhook (unauthenticated — Razorpay's servers call this
+  // directly, there's no Cognito token; see template.yaml's explicit
+  // Auth: NONE override for this exact path, same pattern as phone-otp above) ──
+  if (method === 'POST' && path === '/v1/billing/razorpay/webhook') {
+    return handleRazorpayWebhook(event);
+  }
+
+  // ── Billing / Razorpay (authenticated) ─────────────────
+  if (method === 'POST' && path === '/v1/billing/razorpay/create-subscription') return createSubscription(event);
+  if (method === 'POST' && path === '/v1/billing/razorpay/verify')              return verifySubscriptionPayment(event);
+  if (method === 'POST' && path === '/v1/billing/razorpay/cancel')              return cancelSubscription(event);
 
   // ── AI provider proxy ───────────────────────────────────
   if (method === 'POST' && path === '/v1/proxy/openai/chat')           return proxyOpenAIChat(event);
